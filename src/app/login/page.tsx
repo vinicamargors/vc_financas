@@ -20,7 +20,7 @@ function LoginForm() {
   const [state, action, pending] = useActionState(sendMagicLink, initial)
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center p-6">
+    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center p-6 pt-[calc(1.5rem+env(safe-area-inset-top))]">
      <GlassCard className="flex flex-col gap-4 p-6">
       <h1 className="text-2xl font-semibold">Entrar</h1>
       {state.status === 'sent' ? (

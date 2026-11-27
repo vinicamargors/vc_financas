@@ -10,7 +10,7 @@ const TABS: { id: TabId; label: string; href?: string; icon: string }[] = [
   { id: 'caixinhas', label: 'Caixinhas', icon: 'M4 8h16v12H4zM8 8V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v3' },
 ]
 
-export function TabBar({ active }: { active: TabId }) {
+export function TabBar({ active }: { active: TabId | null }) {
   return (
     <nav aria-label="Navegação principal" className="tab-bar glass">
       {TABS.map((t) => {

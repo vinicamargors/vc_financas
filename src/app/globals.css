@@ -85,7 +85,7 @@ body {
 .app-shell {
   max-width: 40rem;
   margin: 0 auto;
-  padding: 1rem 1rem calc(6.5rem + env(safe-area-inset-bottom));
+  padding: calc(1rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) calc(6.5rem + env(safe-area-inset-bottom)) calc(1rem + env(safe-area-inset-left));
 }
 
 .app-header {
@@ -102,8 +102,8 @@ body {
 
 .tab-bar {
   position: fixed;
-  left: 0.75rem;
-  right: 0.75rem;
+  left: calc(0.75rem + env(safe-area-inset-left));
+  right: calc(0.75rem + env(safe-area-inset-right));
   bottom: calc(0.75rem + env(safe-area-inset-bottom));
   max-width: 36rem;
   margin: 0 auto;
