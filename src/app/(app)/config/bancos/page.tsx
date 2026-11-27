@@ -1,5 +1,4 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { GlassCard } from '@/components/glass/glass-card'
 import { requireUser } from '@/lib/supabase/server'
 import { saveCredentialsAction } from './actions'
 import { ConnectWidget } from './connect-widget'
@@ -24,42 +23,61 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
   const hasCredentials = Boolean(data)
 
   return (
-    <main className="flex flex-col gap-4">
-      <h1>Conectar bancos</h1>
+    <main className="flow">
+      <h1 className="title">Conectar bancos</h1>
+      <p className="flow-lead">Três passos. Seus dados ficam entre você, a Pluggy e este app.</p>
+      <div className="steps" aria-label={`Passo ${hasCredentials ? 3 : 2} de 3`}>
+        <i className="on" />
+        <i className="on" />
+        <i className={hasCredentials ? 'on' : undefined} />
+      </div>
 
-      <GlassCard as="section" className="p-5">
-        <h2>1. Meu Pluggy e seus bancos</h2>
+      <section className="step">
+        <p className="step-k">Passo 1 de 3</p>
+        <h2>Meu Pluggy e seus bancos</h2>
         <p>
           Crie sua conta no <a href="https://meu.pluggy.ai" target="_blank" rel="noreferrer">Meu Pluggy</a> e conecte
           os bancos e cartões que quiser acompanhar.
         </p>
-      </GlassCard>
+      </section>
 
-      <GlassCard as="section" className="p-5">
-        <h2>2. Credenciais da Pluggy</h2>
+      <section className="step">
+        <p className="step-k">Passo 2 de 3</p>
+        <h2>Chave da Pluggy</h2>
         <p>
           No <a href="https://dashboard.pluggy.ai" target="_blank" rel="noreferrer">dashboard da Pluggy</a>, crie uma
           aplicação e cole o Client ID e o Client Secret abaixo.
         </p>
-        {salvo && <p role="status">Credenciais salvas.</p>}
-        {erro && <p role="alert">{ERROR_MESSAGES[erro] ?? ERROR_MESSAGES.falha}</p>}
+        {salvo && (
+          <p role="status" className="msg ok">
+            Credenciais salvas.
+          </p>
+        )}
+        {erro && (
+          <p role="alert" className="msg err">
+            {ERROR_MESSAGES[erro] ?? ERROR_MESSAGES.falha}
+          </p>
+        )}
         <form action={saveCredentialsAction}>
-          <label>
-            Client ID
-            <input name="clientId" required autoComplete="off" />
+          <label className="field">
+            <small>Client ID</small>
+            <input name="clientId" required autoComplete="off" spellCheck={false} />
           </label>
-          <label>
-            Client Secret
+          <label className="field">
+            <small>Client Secret</small>
             <input name="clientSecret" type="password" required autoComplete="off" />
           </label>
-          <button type="submit">Testar e salvar</button>
+          <button type="submit" className="btn">
+            Testar e salvar
+          </button>
         </form>
-      </GlassCard>
+      </section>
 
-      <GlassCard as="section" className="p-5">
-        <h2>3. Entrar com o Meu Pluggy</h2>
+      <section className="step">
+        <p className="step-k">Passo 3 de 3</p>
+        <h2>Entrar com o Meu Pluggy</h2>
         {hasCredentials ? <ConnectWidget /> : <p>Salve as credenciais no passo 2 para continuar.</p>}
-      </GlassCard>
+      </section>
     </main>
   )
 }

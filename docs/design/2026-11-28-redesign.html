@@ -1,0 +1,239 @@
+<title>VC Finanças — novo visual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: phone frames side by side; dark-first (C6), Nubank structure; glass only on chrome (top bar, tab bar, sheets) */
+:root{
+  --bg:#0B0B0C; --surface:#151517; --surface-2:#1C1C1F; --line:#26262A;
+  --fg:#F4F4F2; --muted:#8E8E93; --faint:#5A5A60;
+  --in:#3DDC97; --out:#F4F4F2; --warn:#FFB547; --bad:#FF6B5E;
+  --pill:#F4F4F2; --pill-fg:#0B0B0C;
+  --glass:rgba(28,28,31,.62); --glass-line:rgba(255,255,255,.09);
+  --page:#000;
+  --sans:"Geist",ui-sans-serif,system-ui,sans-serif; --mono:"Geist Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  --bg:#F6F6F4; --surface:#FFFFFF; --surface-2:#F0F0EE; --line:#E4E4E1;
+  --fg:#0B0B0C; --muted:#6B6B70; --faint:#A0A0A5;
+  --in:#0E9F62; --out:#0B0B0C; --warn:#B86E00; --bad:#D63C2F;
+  --pill:#0B0B0C; --pill-fg:#FFFFFF;
+  --glass:rgba(255,255,255,.66); --glass-line:rgba(0,0,0,.07); --page:#E9E9E6; color-scheme:light}}
+:root[data-theme="light"]{
+  --bg:#F6F6F4; --surface:#FFFFFF; --surface-2:#F0F0EE; --line:#E4E4E1;
+  --fg:#0B0B0C; --muted:#6B6B70; --faint:#A0A0A5;
+  --in:#0E9F62; --out:#0B0B0C; --warn:#B86E00; --bad:#D63C2F;
+  --pill:#0B0B0C; --pill-fg:#FFFFFF;
+  --glass:rgba(255,255,255,.66); --glass-line:rgba(0,0,0,.07); --page:#E9E9E6; color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--fg);font-family:var(--sans);font-size:15px;line-height:1.4;-webkit-font-smoothing:antialiased;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 56px}
+.intro{max-width:1280px;margin:0 auto 28px}
+.intro h1{font-size:1.5rem;font-weight:600;letter-spacing:-.02em;margin:0 0 6px}
+.intro p{color:var(--muted);margin:0;max-width:64ch}
+.row{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:28px;align-items:start}
+.cap{font-size:.8rem;color:var(--muted);margin:0 0 10px;font-weight:500}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+
+/* phone */
+.phone{position:relative;background:var(--bg);border-radius:44px;height:720px;overflow:hidden;border:1px solid var(--line);box-shadow:0 30px 60px -30px rgba(0,0,0,.5)}
+.scroll{height:100%;overflow:hidden;padding:0 0 110px}
+.status{height:44px;display:flex;justify-content:space-between;align-items:center;padding:0 28px;font-size:.8rem;font-weight:600}
+.topbar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:8px 20px 12px}
+.avatar{width:38px;height:38px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;font-weight:600;font-size:.85rem}
+.icons{display:flex;gap:8px}
+.ib{width:38px;height:38px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;border:0;color:var(--fg)}
+.ib svg{width:18px;height:18px}
+.hello{padding:4px 20px 0;font-size:1.05rem;font-weight:500}
+
+.balance{padding:22px 20px 18px}
+.label{font-size:.8rem;color:var(--muted);font-weight:500;display:flex;align-items:center;gap:6px}
+.big{font-family:var(--mono);font-size:2.4rem;font-weight:600;letter-spacing:-.04em;margin-top:6px;font-variant-numeric:tabular-nums}
+.big small{font-size:1rem;color:var(--muted);font-weight:500;margin-right:4px;letter-spacing:0}
+.sub{font-size:.8rem;color:var(--muted);margin-top:4px}
+.banks{display:flex;gap:16px;margin-top:14px;font-size:.85rem}
+.banks span b{font-family:var(--mono);font-weight:600;margin-left:6px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
+
+.actions{display:flex;gap:14px;padding:4px 20px 22px;overflow:hidden}
+.act{display:flex;flex-direction:column;align-items:center;gap:8px;width:68px;flex:none;font-size:.75rem;font-weight:500;text-align:center}
+.act i{width:60px;height:60px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center}
+.act i svg{width:22px;height:22px}
+.act .badge{position:absolute}
+
+.sep{height:1px;background:var(--line);margin:0 20px}
+.block{padding:18px 20px;display:flex;flex-direction:column;gap:6px}
+.block .hd{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:1rem}
+.block .hd svg{width:16px;height:16px;color:var(--muted)}
+.block .val{font-family:var(--mono);font-size:1.35rem;font-weight:600;letter-spacing:-.03em}
+.block .meta{font-size:.82rem;color:var(--muted)}
+.bar{height:4px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:var(--fg);border-radius:4px}
+
+.tile{margin:6px 20px 0;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 16px;display:flex;gap:12px;align-items:center}
+.tile .t{font-weight:600;font-size:.9rem}
+.tile .m{font-size:.8rem;color:var(--muted)}
+.tile .go{margin-left:auto;background:var(--pill);color:var(--pill-fg);border-radius:99px;padding:7px 14px;font-size:.8rem;font-weight:600;white-space:nowrap}
+.tile .n{width:34px;height:34px;border-radius:50%;background:var(--warn);color:#0B0B0C;display:grid;place-items:center;font-weight:700;font-size:.85rem;flex:none}
+
+/* glass chrome */
+.tabbar{position:absolute;left:14px;right:14px;bottom:22px;height:64px;border-radius:32px;background:var(--glass);backdrop-filter:blur(22px) saturate(170%);-webkit-backdrop-filter:blur(22px) saturate(170%);border:1px solid var(--glass-line);display:grid;grid-template-columns:repeat(4,1fr);align-items:center;box-shadow:0 10px 30px -12px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08)}
+.tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.66rem;font-weight:500;color:var(--muted)}
+.tab svg{width:21px;height:21px}
+.tab.on{color:var(--fg)}
+.tab.on span.pill{background:var(--surface-2);border-radius:99px;padding:5px 14px;display:grid;place-items:center}
+.glasshead{position:absolute;top:0;left:0;right:0;z-index:3;background:var(--glass);backdrop-filter:blur(22px) saturate(170%);-webkit-backdrop-filter:blur(22px) saturate(170%);border-bottom:1px solid var(--glass-line)}
+
+/* extrato */
+.title{font-size:1.6rem;font-weight:600;letter-spacing:-.03em;padding:4px 20px 12px}
+.chips{display:flex;gap:8px;padding:0 20px 12px}
+.chip{border:1px solid var(--line);border-radius:99px;padding:6px 13px;font-size:.8rem;font-weight:500;color:var(--muted)}
+.chip.on{background:var(--pill);color:var(--pill-fg);border-color:var(--pill)}
+.day{display:flex;justify-content:space-between;padding:18px 20px 6px;font-size:.78rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.tx{display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;padding:10px 20px}
+.tx .ic{width:40px;height:40px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;font-size:.72rem;font-weight:700;color:var(--muted)}
+.tx .nm{min-width:0}
+.tx .nm b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx .nm span{font-size:.8rem;color:var(--muted)}
+.tx .am{font-family:var(--mono);font-weight:600;font-size:.92rem;text-align:right}
+.tx .am.in{color:var(--in)}
+.tx .am.neu{color:var(--muted);font-weight:500}
+.tag{display:inline-block;font-size:.68rem;font-weight:600;padding:1px 7px;border-radius:99px;background:var(--surface-2);color:var(--muted);margin-left:6px;vertical-align:1px}
+
+/* sheet / onboarding */
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.sheet{position:absolute;left:8px;right:8px;bottom:8px;border-radius:34px;background:var(--glass);backdrop-filter:blur(28px) saturate(170%);-webkit-backdrop-filter:blur(28px) saturate(170%);border:1px solid var(--glass-line);padding:12px 20px 24px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.grab{width:38px;height:5px;border-radius:5px;background:var(--faint);margin:0 auto 18px}
+.steps{display:flex;gap:6px;margin-bottom:16px}
+.steps i{flex:1;height:4px;border-radius:4px;background:var(--line)}
+.steps i.on{background:var(--fg)}
+.sheet h3{margin:0 0 6px;font-size:1.25rem;letter-spacing:-.02em}
+.sheet p{margin:0 0 16px;color:var(--muted);font-size:.88rem}
+.field{background:var(--surface-2);border-radius:14px;padding:11px 14px;margin-bottom:10px}
+.field small{display:block;color:var(--muted);font-size:.72rem;font-weight:500}
+.field div{font-family:var(--mono);font-size:.88rem;margin-top:2px}
+.btn{display:block;width:100%;border:0;border-radius:99px;background:var(--pill);color:var(--pill-fg);font:inherit;font-weight:600;padding:15px;margin-top:6px}
+.ghost{display:block;text-align:center;color:var(--muted);font-size:.85rem;margin-top:12px;font-weight:500}
+
+/* login */
+.login{height:100%;display:flex;flex-direction:column;padding:0 24px 34px}
+.mark{margin-top:120px;width:52px;height:52px;border-radius:16px;background:var(--fg);color:var(--bg);display:grid;place-items:center;font-weight:700;letter-spacing:-.04em}
+.login h2{font-size:2rem;letter-spacing:-.04em;line-height:1.05;margin:28px 0 10px;font-weight:600}
+.login p{color:var(--muted);margin:0}
+.login .in{margin-top:auto;border-bottom:1.5px solid var(--fg);padding:10px 0;font-size:1.1rem}
+.login .in span{color:var(--faint)}
+.notes{max-width:1280px;margin:32px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.notes div{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px 18px;font-size:.88rem;color:var(--muted)}
+.notes b{display:block;color:var(--fg);margin-bottom:4px}
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V20H4z"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="pie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v9h9"/><circle cx="12" cy="12" r="9"/></symbol>
+  <symbol id="jar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="7" width="14" height="14" rx="3"/><path d="M8 3h8v4H8z"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12.5 9 17 20 6"/></symbol>
+  <symbol id="bank" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 9 12 4l9 5M5 10v8M19 10v8M9.5 10v8M14.5 10v8M3 20h18"/></symbol>
+  <symbol id="card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+
+<header class="intro">
+  <h1>Nova direção visual</h1>
+  <p>Fundo preto como o C6. Estrutura do Nubank: saldo grande no topo, atalhos redondos e blocos separados por linhas finas. O vidro fica só na barra de abas e nas janelas que sobem da base, onde ele faz sentido. Sem roxo, sem degradê, sem emoji. Abre no tema claro se o seu iPhone estiver no claro. Valores de exemplo.</p>
+</header>
+
+<main class="row">
+
+  <section>
+    <p class="cap">Início</p>
+    <div class="phone"><div class="scroll">
+      <div class="status"><span>9:41</span><span>●●● 5G</span></div>
+      <div class="topbar"><div class="avatar">V</div><div class="icons"><button class="ib" aria-label="Ocultar valores"><svg><use href="#eye"/></svg></button><button class="ib" aria-label="Avisos"><svg><use href="#bell"/></svg></button></div></div>
+      <div class="hello">Olá, Vini</div>
+      <div class="balance">
+        <div class="label">Saldo em conta</div>
+        <div class="big num"><small>R$</small>600,00</div>
+        <div class="banks"><span><i class="dot" style="background:#CC092F"></i>Bradesco<b>300,00</b></span><span><i class="dot" style="background:var(--muted)"></i>Nubank<b>300,00</b></span></div>
+        <div class="sub">Atualizado hoje, 08:12</div>
+      </div>
+      <div class="actions">
+        <div class="act"><i><svg><use href="#check"/></svg></i>Revisar</div>
+        <div class="act"><i><svg><use href="#list"/></svg></i>Extrato</div>
+        <div class="act"><i><svg><use href="#jar"/></svg></i>Caixinhas</div>
+        <div class="act"><i><svg><use href="#bank"/></svg></i>Bancos</div>
+      </div>
+      <div class="tile"><span class="n">2</span><div><div class="t">Revisar gastos</div><div class="m">2 lançamentos sem categoria</div></div><span class="go">Revisar</span></div>
+      <div class="block" style="margin-top:10px"><div class="hd">Cartão de crédito <svg><use href="#chev"/></svg></div><div class="meta">Fatura atual · Nubank + Bradesco</div><div class="val num">R$ 1.842,30</div><div class="meta">Vence 20 dez</div></div>
+      <div class="sep"></div>
+      <div class="block"><div class="hd">Caixinhas <svg><use href="#chev"/></svg></div><div class="val num">R$ 24.400,00</div><div class="meta">Rendeu R$ 13,50 hoje</div></div>
+    </div>
+    <nav class="tabbar"><div class="tab on"><span class="pill"><svg><use href="#home"/></svg></span>Início</div><div class="tab"><svg><use href="#list"/></svg>Extrato</div><div class="tab"><svg><use href="#pie"/></svg>Gastos</div><div class="tab"><svg><use href="#jar"/></svg>Caixinhas</div></nav>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">Extrato</p>
+    <div class="phone"><div class="scroll">
+      <div class="status"><span>9:41</span><span>●●● 5G</span></div>
+      <div class="title" style="padding-top:12px">Extrato</div>
+      <div class="chips"><span class="chip on">Tudo</span><span class="chip">Entradas</span><span class="chip">Saídas</span><span class="chip">Cartão</span></div>
+      <div class="day"><span>Hoje</span><span class="num">− 219,00</span></div>
+      <div class="tx"><span class="ic">MR</span><div class="nm"><b>Cantina do Tio Marcelo</b><span>Nubank · cartão •••• 1234</span></div><span class="am num">− 9,00</span></div>
+      <div class="tx"><span class="ic">PI</span><div class="nm"><b>Posto Ipiranga</b><span>Nubank · cartão •••• 1234</span></div><span class="am num">− 210,00</span></div>
+      <div class="tx"><span class="ic">⇄</span><div class="nm"><b>Bradesco → Nubank</b><span>Transferência entre contas</span></div><span class="am neu num">500,00</span></div>
+      <div class="day"><span>27 nov</span><span class="num">+ 5.640,00</span></div>
+      <div class="tx"><span class="ic">AC</span><div class="nm"><b>ACME LTDA</b><span>Bradesco · Pix recebido</span></div><span class="am in num">+ 7.000,00</span></div>
+      <div class="tx"><span class="ic">MA</span><div class="nm"><b>Pix para Maria</b><span>Bradesco</span></div><span class="am num">− 300,00</span></div>
+      <div class="tx"><span class="ic">MG</span><div class="nm"><b>Magazine Luiza<span class="tag">3/12</span></b><span>Bradesco · cartão •••• 5678</span></div><span class="am num">− 100,00</span></div>
+      <div class="tx"><span class="ic">NF</span><div class="nm"><b>Netflix</b><span>Nubank · cartão •••• 1234</span></div><span class="am num">− 59,90</span></div>
+    </div>
+    <nav class="tabbar"><div class="tab"><svg><use href="#home"/></svg>Início</div><div class="tab on"><span class="pill"><svg><use href="#list"/></svg></span>Extrato</div><div class="tab"><svg><use href="#pie"/></svg>Gastos</div><div class="tab"><svg><use href="#jar"/></svg>Caixinhas</div></nav>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">Conectar bancos (janela de vidro)</p>
+    <div class="phone"><div class="scroll">
+      <div class="status"><span>9:41</span><span>●●● 5G</span></div>
+      <div class="topbar"><div class="avatar">V</div><div class="icons"><button class="ib"><svg><use href="#eye"/></svg></button></div></div>
+      <div class="balance"><div class="label">Saldo em conta</div><div class="big num"><small>R$</small>600,00</div></div>
+      <div class="actions"><div class="act"><i><svg><use href="#check"/></svg></i>Revisar</div><div class="act"><i><svg><use href="#list"/></svg></i>Extrato</div><div class="act"><i><svg><use href="#jar"/></svg></i>Caixinhas</div><div class="act"><i><svg><use href="#bank"/></svg></i>Bancos</div></div>
+    </div>
+    <div class="dim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+      <h3>Chave da Pluggy</h3>
+      <p>Cole o Client ID e o Client Secret da sua aplicação em dashboard.pluggy.ai.</p>
+      <div class="field"><small>Client ID</small><div>3f2a…9c41</div></div>
+      <div class="field"><small>Client Secret</small><div>••••••••••••••••</div></div>
+      <button class="btn">Testar e salvar</button>
+      <span class="ghost">Onde encontro isso?</span>
+    </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="cap">Login</p>
+    <div class="phone">
+      <div class="login">
+        <div class="mark">vc</div>
+        <h2>Seu dinheiro,<br>sem planilha.</h2>
+        <p>Entre com o e-mail que recebeu o convite.</p>
+        <div class="in"><span>seu@email.com</span></div>
+        <button class="btn" style="margin-top:20px">Enviar link de acesso</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<section class="notes">
+  <div><b>Cor</b>Preto e branco. Verde só para dinheiro que entra. Laranja só para o que pede ação. A cor do banco aparece num ponto pequeno ao lado do nome.</div>
+  <div><b>Números</b>Fonte mono com algarismos alinhados. O saldo é o maior elemento da tela.</div>
+  <div><b>Vidro</b>Só na barra de abas flutuante e nas janelas que sobem da base. O conteúdo fica em fundo sólido para ser fácil de ler.</div>
+  <div><b>Botões</b>Pílula branca sobre o preto, como no C6. Atalhos redondos, como no Nubank.</div>
+</section>

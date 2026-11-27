@@ -1,56 +1,112 @@
 import Link from 'next/link'
-import { GlassCard } from '@/components/glass/glass-card'
 import { Money } from '@/components/money'
+import { BankDot } from '@/components/bank-dot'
+import { Icon, type IconName } from '@/components/icons'
 import { ConnectionStatus } from '@/components/connection-status'
-import { formatTime } from '@/lib/format/date'
+import { formatDayLabel, formatTime, toLocalDate } from '@/lib/format/date'
 import { loadHomeData, oldestHealthySync } from '@/lib/queries/balances'
-import { requireUser } from '@/lib/supabase/server'
+import { createServerSupabase, requireUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
+const ACTIONS: { label: string; icon: IconName; href?: string }[] = [
+  { label: 'Revisar', icon: 'check' },
+  { label: 'Extrato', icon: 'list', href: '/extrato' },
+  { label: 'Caixinhas', icon: 'jar' },
+  { label: 'Bancos', icon: 'bank', href: '/config/bancos' },
+]
+
+function updatedLabel(iso: string): string {
+  const day = toLocalDate(iso)
+  const when = day === toLocalDate(new Date()) ? 'hoje' : formatDayLabel(day)
+  return `Atualizado ${when}, ${formatTime(iso)}`
+}
+
+function QuickActions() {
+  return (
+    <nav className="actions" aria-label="Atalhos">
+      {ACTIONS.map((a) =>
+        a.href ? (
+          <Link key={a.label} href={a.href} className="act">
+            <span className="act-icon">
+              <Icon name={a.icon} />
+            </span>
+            {a.label}
+          </Link>
+        ) : (
+          <span key={a.label} className="act" aria-disabled="true">
+            <span className="act-icon">
+              <Icon name={a.icon} />
+            </span>
+            {a.label}
+            <span className="soon">em breve</span>
+          </span>
+        ),
+      )}
+    </nav>
+  )
+}
+
 export default async function InicioPage() {
-  await requireUser()
-  const { connections, summary } = await loadHomeData()
-  const syncedAt = oldestHealthySync(connections)
+  const user = await requireUser()
+  const supabase = await createServerSupabase()
+  const [{ connections, summary }, profile] = await Promise.all([
+    loadHomeData(),
+    supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
+  ])
+  const name = profile.data?.display_name?.trim()
+  const hello = <p className="hello">{name ? `Olá, ${name}` : 'Olá'}</p>
 
   if (connections.length === 0) {
     return (
-      <main className="flex flex-col gap-4">
-        <GlassCard as="section" className="p-5">
-          <h1 className="text-xl font-semibold">Conecte seus bancos</h1>
-          <p className="mt-1 text-muted">Ligue sua conta na Pluggy para ver saldos e extrato aqui.</p>
-          <Link href="/config/bancos" className="mt-3 inline-block font-semibold text-accent underline">
-            Conecte seus bancos
+      <main>
+        {hello}
+        <h1 className="sr-only">Início</h1>
+        <div className="tiles tiles-top">
+          <Link href="/config/bancos" className="tile">
+            <span className="n neutral" aria-hidden="true">
+              <Icon name="bank" />
+            </span>
+            <div>
+              <span className="t">Conecte seus bancos</span>
+              <span className="m">Ligue sua conta na Pluggy para ver saldos e extrato aqui.</span>
+            </div>
+            <span className="go">Conectar</span>
           </Link>
-        </GlassCard>
+        </div>
       </main>
     )
   }
 
+  const syncedAt = oldestHealthySync(connections)
+
   return (
-    <main className="flex flex-col gap-4">
-      <ConnectionStatus connections={connections} />
-      <GlassCard as="section" className="p-5" aria-labelledby="saldo-titulo">
-        <div className="flex items-baseline justify-between gap-2">
-          <h1 id="saldo-titulo" className="text-sm font-medium text-muted">Saldo em conta</h1>
-          {syncedAt && <span className="text-xs text-muted">atualizado {formatTime(syncedAt)}</span>}
-        </div>
-        <p className="mt-1 text-3xl font-bold">
-          <Money cents={summary.totalCents} />
+    <main>
+      {hello}
+      <section className="balance" aria-labelledby="saldo-titulo">
+        <h1 id="saldo-titulo" className="label">
+          Saldo em conta
+        </h1>
+        <p className="big">
+          <Money cents={summary.totalCents} currency="small" />
         </p>
         {summary.byInstitution.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">Nenhuma conta corrente encontrada.</p>
+          <p className="sub">Nenhuma conta corrente encontrada.</p>
         ) : (
-          <ul className="mt-3 flex flex-col gap-1 text-sm">
+          <ul className="banks">
             {summary.byInstitution.map((i) => (
-              <li key={i.institution} className="flex justify-between gap-2">
-                <span>{i.institution}</span>
-                <Money cents={i.balanceCents} />
+              <li key={i.institution}>
+                <BankDot institution={i.institution} />
+                {i.institution}
+                <Money cents={i.balanceCents} currency="none" />
               </li>
             ))}
           </ul>
         )}
-      </GlassCard>
+        {syncedAt && <p className="sub">{updatedLabel(syncedAt)}</p>}
+      </section>
+      <QuickActions />
+      <ConnectionStatus connections={connections} />
     </main>
   )
 }

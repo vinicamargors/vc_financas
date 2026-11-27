@@ -25,19 +25,29 @@ export function connectionNotices(connections: ConnectionRow[], now: Date = new 
   return out
 }
 
+/** Bloco de ação: número laranja, o que precisa ser feito e a pílula que leva a Bancos. */
 export function ConnectionStatus({ connections }: { connections: ConnectionRow[] }) {
   const notices = connectionNotices(connections)
   if (notices.length === 0) return null
+  const reconnect = notices.some((n) => n.kind === 'reconnect')
   return (
-    <ul className="flex flex-col gap-2" aria-label="Avisos de conexão">
-      {notices.map((n) => (
-        <li key={n.id} className="glass flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm">
-          <span>{n.text}</span>
-          <Link href="/config/bancos" className="font-semibold text-accent underline">
-            {n.kind === 'reconnect' ? 'Reconectar' : 'Renovar'}
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <section className="tiles" aria-label="Avisos de conexão">
+      <Link href="/config/bancos" className="tile">
+        <span className="n" aria-hidden="true">
+          {notices.length}
+        </span>
+        <div>
+          <span className="t">
+            {reconnect ? 'Reconectar bancos' : 'Renovar autorização'}
+          </span>
+          <ul className="m">
+            {notices.map((n) => (
+              <li key={n.id}>{n.text}</li>
+            ))}
+          </ul>
+        </div>
+        <span className="go">{reconnect ? 'Reconectar' : 'Renovar'}</span>
+      </Link>
+    </section>
   )
 }

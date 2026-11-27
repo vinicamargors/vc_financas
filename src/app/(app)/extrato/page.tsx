@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import { GlassCard } from '@/components/glass/glass-card'
-import { Money } from '@/components/money'
-import { formatDayLabel } from '@/lib/format/date'
+import { subDays } from 'date-fns'
+import { Icon } from '@/components/icons'
+import { toLocalDate } from '@/lib/format/date'
 import { loadStatement } from '@/lib/queries/statement'
 import { requireUser } from '@/lib/supabase/server'
+import { StatementView } from './statement-view'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Extrato' }
@@ -14,44 +15,30 @@ export default async function ExtratoPage() {
 
   if (days.length === 0) {
     return (
-      <main className="flex flex-col gap-4">
-        <GlassCard as="section" className="p-5">
-          <h1 className="text-xl font-semibold">Extrato</h1>
-          <p className="mt-1 text-muted">Nenhuma transação nos últimos 90 dias.</p>
-          <Link href="/config/bancos" className="mt-3 inline-block font-semibold text-accent underline">
-            Conecte seus bancos
+      <main>
+        <h1 className="title">Extrato</h1>
+        <p className="empty empty-lead">Nenhuma transação nos últimos 90 dias.</p>
+        <div className="tiles">
+          <Link href="/config/bancos" className="tile">
+            <span className="n neutral" aria-hidden="true">
+              <Icon name="bank" />
+            </span>
+            <div>
+              <span className="t">Conecte seus bancos</span>
+              <span className="m">As transações aparecem aqui depois da conexão.</span>
+            </div>
+            <span className="go">Conectar</span>
           </Link>
-        </GlassCard>
+        </div>
       </main>
     )
   }
 
+  const now = new Date()
   return (
-    <main className="flex flex-col gap-4">
-      <h1 className="text-xl font-semibold">Extrato</h1>
-      {days.map((day) => (
-        <section key={day.date} aria-label={formatDayLabel(day.date)}>
-          <div className="flex justify-between px-1 pb-1 text-sm text-muted">
-            <span>{formatDayLabel(day.date)}</span>
-            <Money cents={day.totalCents} sign />
-          </div>
-          <GlassCard as="ul" className="flex flex-col divide-y divide-white/20 p-2">
-            {day.items.map((t) => (
-              <li key={t.id} className="flex items-center justify-between gap-3 px-2 py-2">
-                <span className="min-w-0">
-                  <b className="block truncate font-medium">{t.description}</b>
-                  <span className="text-xs text-muted">
-                    {[t.accountLabel, t.cardLast4 ? `cartão •••• ${t.cardLast4}` : null, t.installmentNumber && t.installmentTotal ? `${t.installmentNumber}/${t.installmentTotal}` : null]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </span>
-                </span>
-                <Money cents={t.amountCents} sign className="shrink-0 font-semibold" />
-              </li>
-            ))}
-          </GlassCard>
-        </section>
-      ))}
+    <main>
+      <h1 className="title">Extrato</h1>
+      <StatementView days={days} today={toLocalDate(now)} yesterday={toLocalDate(subDays(now, 1))} />
     </main>
   )
 }

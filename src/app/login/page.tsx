@@ -2,7 +2,6 @@
 
 import { Suspense, useActionState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { GlassCard } from '@/components/glass/glass-card'
 import { sendMagicLink, type LoginState } from './actions'
 
 const initial: LoginState = { status: 'idle' }
@@ -20,43 +19,50 @@ function LoginForm() {
   const [state, action, pending] = useActionState(sendMagicLink, initial)
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center p-6 pt-[calc(1.5rem+env(safe-area-inset-top))]">
-     <GlassCard className="flex flex-col gap-4 p-6">
-      <h1 className="text-2xl font-semibold">Entrar</h1>
+    <main className="login">
+      <div className="mark" aria-hidden="true">
+        vc
+      </div>
+      <h1>
+        Seu dinheiro,
+        <br />
+        sem planilha.
+      </h1>
+      <p>Entre com o e-mail que recebeu o convite.</p>
       {state.status === 'sent' ? (
-        <p role="status">Enviamos um link para seu e-mail.</p>
+        <p role="status" className="msg ok login-sent">
+          Enviamos um link para seu e-mail.
+        </p>
       ) : (
-        <form action={action} className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm">
+        <form action={action}>
+          <label htmlFor="email" className="sr-only">
             E-mail
-            <input
-              name="email"
-              type="email"
-              required
-              autoComplete="email"
-              className="rounded-xl border border-black/20 bg-white/40 dark:border-white/20 dark:bg-black/20 px-3 py-2 text-base"
-            />
           </label>
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-xl bg-accent px-3 py-2 font-medium text-white disabled:opacity-60 dark:text-black"
-          >
-            {pending ? 'Enviando…' : 'Enviar link'}
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            inputMode="email"
+            placeholder="seu@email.com"
+            className="underline-input"
+          />
+          <button type="submit" disabled={pending} className="btn">
+            {pending ? 'Enviando…' : 'Enviar link de acesso'}
           </button>
           {linkExpired && state.status !== 'error' && (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="msg err">
               Link expirado ou já usado. Peça um novo.
             </p>
           )}
           {state.status === 'error' && (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="msg err">
               {state.message}
             </p>
           )}
         </form>
       )}
-     </GlassCard>
     </main>
   )
 }

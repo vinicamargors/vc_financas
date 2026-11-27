@@ -45,6 +45,25 @@ describe('Money', () => {
     expect(screen.getByText('− 9,00')).toBeTruthy()
   })
 
+  it('saldo grande: "R$" separado e menor', () => {
+    const { container } = render(<Money cents={60000} currency="small" />)
+    expect(container.querySelector('small')?.textContent).toBe('R$')
+    expect(container.textContent).toBe('R$600,00')
+  })
+
+  it('sem símbolo, inclusive oculto', () => {
+    render(
+      <>
+        <Money cents={-30000} currency="none" />
+        <HideValuesProvider initial={true}>
+          <Money cents={30000} currency="none" />
+        </HideValuesProvider>
+      </>,
+    )
+    expect(screen.getByText('−300,00')).toBeTruthy()
+    expect(screen.getByText('•••')).toBeTruthy()
+  })
+
   it('reverte a troca otimista quando a ação falha', async () => {
     vi.mocked(setHideValuesAction).mockRejectedValueOnce(new Error('falhou'))
     const user = userEvent.setup()
