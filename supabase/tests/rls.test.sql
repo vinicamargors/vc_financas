@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(20);
 
 insert into auth.users (id, email, instance_id, aud, role) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'a@example.com', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
@@ -36,10 +36,34 @@ select throws_ok(
   '42501', null, 'B nao insere transaction para A');
 select is((select count(*)::int from allowed_emails), 0, 'allowed_emails invisivel para authenticated');
 
+-- FKs compostas: B nao referencia linhas de A
+select throws_ok(
+  $$insert into transactions (user_id, account_id, source, date, amount_cents, description_raw)
+    values ('bbbbbbbb-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-00000000000a', 'manual', '2026-11-02', -100, 'x')$$,
+  '23503', null, 'B nao cria transaction apontando para conta de A');
+select throws_ok(
+  $$insert into balance_snapshots (user_id, account_id, date, balance_cents)
+    values ('bbbbbbbb-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-00000000000a', '2026-11-02', 1)$$,
+  '23503', null, 'B nao cria snapshot apontando para conta de A');
+select throws_ok(
+  $$insert into accounts (user_id, connection_id, external_id, type, name, balance_cents)
+    values ('bbbbbbbb-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-00000000000a', 'ext-b', 'BANK', 'x', 0)$$,
+  '23503', null, 'B nao cria conta apontando para connection de A');
+
+-- B nao altera nem apaga linhas de A
+with u as (update transactions set description_raw = 'hack' returning 1) select is((select count(*)::int from u), 0, 'B atualiza 0 transactions');
+with d as (delete from transactions returning 1) select is((select count(*)::int from d), 0, 'B apaga 0 transactions');
+with d as (delete from accounts returning 1) select is((select count(*)::int from d), 0, 'B apaga 0 accounts');
+
 -- como A
 select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-0000-0000-000000000001","role":"authenticated"}', true);
 select is((select count(*)::int from transactions), 1, 'A ve exatamente 1 transaction');
 select is((select count(*)::int from allowed_emails), 0, 'allowed_emails invisivel tambem para A');
+select is((select count(*)::int from pluggy_credentials), 0, 'pluggy_credentials invisivel ate para o dono');
+select throws_ok(
+  $$update transactions set user_id = 'bbbbbbbb-0000-0000-0000-000000000002'$$,
+  '42501', null, 'A nao transfere transaction para B');
+select is((select count(*)::int from transactions where description_raw = 'Mercado'), 1, 'transaction de A intacta');
 
 select * from finish();
 rollback;

@@ -40,13 +40,14 @@ create table public.connections (
   consent_expires_at timestamptz,
   last_synced_at timestamptz,
   created_at timestamptz not null default now(),
-  unique (user_id, pluggy_item_id)
+  unique (user_id, pluggy_item_id),
+  unique (id, user_id)
 );
 
 create table public.accounts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users on delete cascade,
-  connection_id uuid references public.connections on delete cascade,
+  connection_id uuid,
   external_id text not null,
   type text not null check (type in ('BANK', 'CREDIT', 'INVESTMENT', 'MANUAL')),
   subtype text,
@@ -58,13 +59,15 @@ create table public.accounts (
   due_day smallint,
   cdi_percent numeric,
   updated_at timestamptz not null default now(),
-  unique (user_id, external_id)
+  unique (user_id, external_id),
+  unique (id, user_id),
+  foreign key (connection_id, user_id) references public.connections (id, user_id) on delete cascade
 );
 
 create table public.transactions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users on delete cascade,
-  account_id uuid not null references public.accounts on delete cascade,
+  account_id uuid not null,
   external_id text,
   source text not null check (source in ('pluggy', 'shortcut', 'manual')),
   date date not null,
@@ -86,15 +89,17 @@ create table public.transactions (
   raw jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (user_id, external_id)
+  unique (user_id, external_id),
+  foreign key (account_id, user_id) references public.accounts (id, user_id) on delete cascade
 );
 
 create table public.balance_snapshots (
   user_id uuid not null references auth.users on delete cascade,
-  account_id uuid not null references public.accounts on delete cascade,
+  account_id uuid not null,
   date date not null,
   balance_cents bigint not null,
-  primary key (account_id, date)
+  primary key (user_id, account_id, date),
+  foreign key (account_id, user_id) references public.accounts (id, user_id) on delete cascade
 );
 
 create index transactions_user_date_idx on public.transactions (user_id, date desc);
@@ -110,15 +115,13 @@ create trigger pluggy_credentials_updated_at before update on public.pluggy_cred
 -- RLS
 alter table public.profiles enable row level security;
 alter table public.allowed_emails enable row level security; -- sem politicas: so service role
-alter table public.pluggy_credentials enable row level security;
+alter table public.pluggy_credentials enable row level security; -- sem politicas: so service role
 alter table public.connections enable row level security;
 alter table public.accounts enable row level security;
 alter table public.transactions enable row level security;
 alter table public.balance_snapshots enable row level security;
 
 create policy profiles_own on public.profiles for all
-  using (user_id = auth.uid()) with check (user_id = auth.uid());
-create policy pluggy_credentials_own on public.pluggy_credentials for all
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy connections_own on public.connections for all
   using (user_id = auth.uid()) with check (user_id = auth.uid());
