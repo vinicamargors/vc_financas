@@ -6,6 +6,8 @@ import { seal } from '@/lib/crypto/secret-box'
 import {
   addItem,
   APP_URL_MISSING_MESSAGE,
+  DB_FAILED_MESSAGE,
+  KEY_INVALID_MESSAGE,
   INVALID_CREDENTIALS_MESSAGE,
   discoverItems,
   saveCredentials,
@@ -59,6 +61,8 @@ function productionDeps(): OnboardingDeps {
 function errorCodeFor(message: string): string {
   if (message === INVALID_CREDENTIALS_MESSAGE) return 'credenciais'
   if (message === APP_URL_MISSING_MESSAGE) return 'app-url'
+  if (message === KEY_INVALID_MESSAGE) return 'chave'
+  if (message === DB_FAILED_MESSAGE) return 'banco'
   return 'falha'
 }
 

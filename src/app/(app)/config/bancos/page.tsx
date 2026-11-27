@@ -6,6 +6,8 @@ import { ConnectWidget } from './connect-widget'
 const ERROR_MESSAGES: Record<string, string> = {
   credenciais: 'Client ID ou Secret incorretos. Confira no dashboard da Pluggy.',
   'app-url': 'APP_URL não configurada.',
+  chave: 'CREDENTIALS_KEY inválida na Vercel. Gere com: openssl rand -base64 32',
+  banco: 'Não foi possível salvar no Supabase. Confira SUPABASE_SERVICE_ROLE_KEY na Vercel.',
   falha: 'Não foi possível concluir a configuração. Tente de novo.',
 }
 
