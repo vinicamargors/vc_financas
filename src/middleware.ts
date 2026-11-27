@@ -1,7 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-
-const PUBLIC_PREFIXES = ['/login', '/auth/', '/api/webhooks/', '/api/cron/']
+import { isPublicPath } from '@/lib/auth/public-paths'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -23,9 +22,11 @@ export async function middleware(request: NextRequest) {
 
   const { data } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
-  const isPublic = PUBLIC_PREFIXES.some((p) => path === p.replace(/\/$/, '') || path.startsWith(p))
 
-  if (!data.user && !isPublic) {
+  if (!data.user && !isPublicPath(path)) {
+    if (path.startsWith('/api/')) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.search = ''
@@ -36,6 +37,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/|icon-.*|apple-icon.*|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/static|_next/image|icons/|favicon\\.ico$|manifest\\.webmanifest$).*)',
   ],
 }

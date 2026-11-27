@@ -1,11 +1,21 @@
 'use client'
 
-import { useActionState } from 'react'
+import { Suspense, useActionState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { sendMagicLink, type LoginState } from './actions'
 
 const initial: LoginState = { status: 'idle' }
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
+function LoginForm() {
+  const linkExpired = useSearchParams().get('erro') === 'link'
   const [state, action, pending] = useActionState(sendMagicLink, initial)
 
   return (
@@ -32,6 +42,11 @@ export default function LoginPage() {
           >
             {pending ? 'Enviando…' : 'Enviar link'}
           </button>
+          {linkExpired && state.status !== 'error' && (
+            <p role="alert" className="text-sm text-red-600">
+              Link expirado ou já usado. Peça um novo.
+            </p>
+          )}
           {state.status === 'error' && (
             <p role="alert" className="text-sm text-red-600">
               {state.message}
