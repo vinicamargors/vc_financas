@@ -2,6 +2,7 @@
 
 import { Suspense, useActionState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { GlassCard } from '@/components/glass/glass-card'
 import { sendMagicLink, type LoginState } from './actions'
 
 const initial: LoginState = { status: 'idle' }
@@ -19,7 +20,8 @@ function LoginForm() {
   const [state, action, pending] = useActionState(sendMagicLink, initial)
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-4 p-6">
+    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center p-6">
+     <GlassCard className="flex flex-col gap-4 p-6">
       <h1 className="text-2xl font-semibold">Entrar</h1>
       {state.status === 'sent' ? (
         <p role="status">Enviamos um link para seu e-mail.</p>
@@ -32,13 +34,13 @@ function LoginForm() {
               type="email"
               required
               autoComplete="email"
-              className="rounded-lg border border-black/20 bg-transparent px-3 py-2 text-base"
+              className="rounded-xl border border-black/20 bg-white/40 dark:border-white/20 dark:bg-black/20 px-3 py-2 text-base"
             />
           </label>
           <button
             type="submit"
             disabled={pending}
-            className="rounded-lg bg-black px-3 py-2 text-white disabled:opacity-60 dark:bg-white dark:text-black"
+            className="rounded-xl bg-accent px-3 py-2 font-medium text-white disabled:opacity-60 dark:text-black"
           >
             {pending ? 'Enviando…' : 'Enviar link'}
           </button>
@@ -54,6 +56,7 @@ function LoginForm() {
           )}
         </form>
       )}
+     </GlassCard>
     </main>
   )
 }

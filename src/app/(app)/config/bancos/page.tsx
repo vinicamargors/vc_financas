@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { GlassCard } from '@/components/glass/glass-card'
 import { requireUser } from '@/lib/supabase/server'
 import { saveCredentialsAction } from './actions'
 import { ConnectWidget } from './connect-widget'
@@ -23,18 +24,18 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
   const hasCredentials = Boolean(data)
 
   return (
-    <main style={{ maxWidth: 560, margin: '0 auto', padding: 16 }}>
+    <main className="flex flex-col gap-4">
       <h1>Conectar bancos</h1>
 
-      <section>
+      <GlassCard as="section" className="p-5">
         <h2>1. Meu Pluggy e seus bancos</h2>
         <p>
           Crie sua conta no <a href="https://meu.pluggy.ai" target="_blank" rel="noreferrer">Meu Pluggy</a> e conecte
           os bancos e cartões que quiser acompanhar.
         </p>
-      </section>
+      </GlassCard>
 
-      <section>
+      <GlassCard as="section" className="p-5">
         <h2>2. Credenciais da Pluggy</h2>
         <p>
           No <a href="https://dashboard.pluggy.ai" target="_blank" rel="noreferrer">dashboard da Pluggy</a>, crie uma
@@ -53,12 +54,12 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
           </label>
           <button type="submit">Testar e salvar</button>
         </form>
-      </section>
+      </GlassCard>
 
-      <section>
+      <GlassCard as="section" className="p-5">
         <h2>3. Entrar com o Meu Pluggy</h2>
         {hasCredentials ? <ConnectWidget /> : <p>Salve as credenciais no passo 2 para continuar.</p>}
-      </section>
+      </GlassCard>
     </main>
   )
 }
