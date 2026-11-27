@@ -170,6 +170,8 @@ Toda classificação manual pode gerar regra ("lembrar para as próximas").
 - **Livre por dia** = livre restante ÷ dias restantes no ciclo.
 - **Gasto real** (tela inicial, categorias, relatórios) = competência: compras do ciclo (cartão por data/parcela + à vista). Exclui transferência, fatura, aporte, resgate e itens a confirmar.
 - **Renda extra** (PLR, 13º, bônus): não abre ciclo novo. Ao cair, o app pergunta "Distribuir R$ X?" com atalhos: mandar para uma caixinha, somar ao livre, ou parte de cada. Só soma ao livre o que o usuário escolher.
+- **Aporte extra em caixinha** (fora do compromisso planejado): sai do livre na hora. Não é gasto.
+- **Resgate de caixinha**: não é renda. O app pergunta "Somar R$ X ao livre?"; só soma se o usuário confirmar.
 - **Estorno**: abate a compra original (no ciclo dela para gasto real; no livre do ciclo atual se a compra foi à vista).
 
 ### 6.6 Compromissos
@@ -199,7 +201,7 @@ Toda classificação manual pode gerar regra ("lembrar para as próximas").
 
 ### 6.9 Telas (ver protótipo)
 
-1. **Início** — livre por dia, livre no ciclo, gasto real (+ a confirmar), caixinha do ciclo, lançamentos de hoje com origem.
+1. **Início** — livre por dia, livre no ciclo, **saldo em conta corrente por banco e total** (ex.: R$ 600 = Bradesco 300 + Nubank 300, vindo da Pluggy, com horário da última atualização), gasto real (+ a confirmar), caixinha do ciclo, lançamentos de hoje com origem. Se o livre ficar maior que o saldo em conta, o app avisa a diferença (sinal de compromisso ou gasto não detectado).
 2. **Dia do pagamento** — distribuição do salário com check automático e livre até o próximo salário.
 3. **Revisão da noite** — cartões para nomear/categorizar/classificar; "lembrar para as próximas".
 4. **Extrato** — lista filtrável (dia/semana/ciclo/mês/ano/período); calendário de gastos por dia.
