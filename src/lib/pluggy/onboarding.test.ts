@@ -4,7 +4,7 @@ import { open, seal } from '@/lib/crypto/secret-box'
 import { createMemoryRepo } from '@/lib/sync/memory-repo'
 import { syncItem } from '@/lib/sync/sync-item'
 import type { PluggySource } from './source'
-import { addItem, discoverItems, saveCredentials, type CredentialsRow, type OnboardingDeps } from './onboarding'
+import { addItem, APP_URL_MISSING_MESSAGE, discoverItems, saveCredentials, type CredentialsRow, type OnboardingDeps } from './onboarding'
 
 const KEY = Buffer.alloc(32, 7).toString('base64')
 const U = 'user-1'
@@ -19,6 +19,7 @@ function fakeSource(over: Partial<PluggySource> = {}): PluggySource {
     fetchTransactions: async () => [],
     createConnectToken: async () => 'tok-1',
     registerWebhook: async () => 'wh-1',
+    deleteWebhook: async () => undefined,
     ...over,
   }
 }
@@ -34,6 +35,7 @@ function setup(over: Partial<OnboardingDeps> = {}) {
     seal: (plain) => seal(plain, KEY),
     randomHex: () => 'ab'.repeat(32),
     saveCredentialsRow: vi.fn(async (userId, row) => void saved.push({ userId, row })),
+    getWebhookId: vi.fn(async () => null),
     appUrl: 'https://app.example',
     runSync: (userId, itemId) =>
       syncItem({ source, repo, today: '2026-11-27' }, userId, itemId),
@@ -82,6 +84,54 @@ describe('saveCredentials', () => {
     expect(r.ok).toBe(false)
     expect(JSON.stringify(r)).not.toContain('LEAK')
     expect(saved).toHaveLength(0)
+  })
+})
+
+describe('saveCredentials: webhooks e APP_URL', () => {
+  it('remove o webhook antigo antes de registrar o novo', async () => {
+    const order: string[] = []
+    const old = fakeSource({ deleteWebhook: async (id) => void order.push(`del:${id}`) })
+    const fresh = fakeSource({ registerWebhook: async () => (order.push('reg'), 'wh-new') })
+    const { deps } = setup({
+      getWebhookId: async () => 'wh-old',
+      loadSource: async () => old,
+      createSource: () => fresh,
+    })
+    expect(await saveCredentials(deps, U, 'id', 'secret')).toEqual({ ok: true })
+    expect(order).toEqual(['del:wh-old', 'reg'])
+  })
+
+  it('falha ao remover o antigo não impede salvar', async () => {
+    const { deps, saved } = setup({
+      getWebhookId: async () => 'wh-old',
+      loadSource: async () => fakeSource({ deleteWebhook: async () => Promise.reject(new Error('x')) }),
+    })
+    expect((await saveCredentials(deps, U, 'id', 'secret')).ok).toBe(true)
+    expect(saved).toHaveLength(1)
+  })
+
+  it('falha ao gravar a linha: remove o webhook recém-criado', async () => {
+    const deleteWebhook = vi.fn(async () => undefined)
+    const { deps } = setup({
+      createSource: () => fakeSource({ registerWebhook: async () => 'wh-new', deleteWebhook }),
+      saveCredentialsRow: async () => Promise.reject(new Error('db')),
+    })
+    expect((await saveCredentials(deps, U, 'id', 'secret')).ok).toBe(false)
+    expect(deleteWebhook).toHaveBeenCalledWith('wh-new')
+  })
+
+  it.each(['', 'ftp://x.com', 'http://app.example', 'não é url'])('APP_URL inválida (%s): nada acontece', async (appUrl) => {
+    const { deps, saved } = setup({ appUrl })
+    expect(await saveCredentials(deps, U, 'id', 'secret')).toEqual({ ok: false, message: APP_URL_MISSING_MESSAGE })
+    expect(deps.testCredentials).not.toHaveBeenCalled()
+    expect(saved).toHaveLength(0)
+  })
+
+  it('aceita http://localhost em desenvolvimento', async () => {
+    const registerWebhook = vi.fn(async (_url: string, _secret: string) => 'w')
+    const { deps } = setup({ appUrl: 'http://localhost:3000/', createSource: () => fakeSource({ registerWebhook }) })
+    expect((await saveCredentials(deps, U, 'id', 'secret')).ok).toBe(true)
+    expect(registerWebhook.mock.calls[0][0]).toBe('http://localhost:3000/api/webhooks/pluggy')
   })
 })
 

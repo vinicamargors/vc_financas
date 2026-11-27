@@ -13,6 +13,7 @@ export interface PluggySource {
   createConnectToken(): Promise<string>
   /** Registra o webhook e devolve o id. O segredo é enviado no header `x-vc-secret`. */
   registerWebhook(url: string, secret: string): Promise<string>
+  deleteWebhook(id: string): Promise<void>
 }
 
 /** O SDK rejeita com o corpo da resposta (`{ code }`) ou com um HTTPError (`response.statusCode`). */
@@ -49,6 +50,7 @@ export function createPluggySource(clientId: string, clientSecret: string): Plug
       const w = await client.createWebhook('all', url, { 'x-vc-secret': secret })
       return w.id
     },
+    deleteWebhook: (id) => client.deleteWebhook(id),
   }
 }
 

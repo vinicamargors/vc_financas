@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation'
 import { seal } from '@/lib/crypto/secret-box'
 import {
   addItem,
+  APP_URL_MISSING_MESSAGE,
+  INVALID_CREDENTIALS_MESSAGE,
   discoverItems,
   saveCredentials,
   type OnboardingDeps,
@@ -39,9 +41,25 @@ function productionDeps(): OnboardingDeps {
         )
       if (error) throw error
     },
+    async getWebhookId(userId) {
+      const { data, error } = await createAdminSupabase()
+        .from('pluggy_credentials')
+        .select('webhook_id')
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (error) throw error
+      return (data?.webhook_id as string | null | undefined) ?? null
+    },
     appUrl: process.env.APP_URL ?? '',
     runSync: sync.runSync,
   }
+}
+
+/** O redirect carrega só um código; a página mapeia para texto fixo. */
+function errorCodeFor(message: string): string {
+  if (message === INVALID_CREDENTIALS_MESSAGE) return 'credenciais'
+  if (message === APP_URL_MISSING_MESSAGE) return 'app-url'
+  return 'falha'
 }
 
 export async function saveCredentialsAction(formData: FormData): Promise<void> {
@@ -52,7 +70,7 @@ export async function saveCredentialsAction(formData: FormData): Promise<void> {
     String(formData.get('clientId') ?? ''),
     String(formData.get('clientSecret') ?? ''),
   )
-  redirect(result.ok ? `${PAGE}?salvo=1` : `${PAGE}?erro=${encodeURIComponent(result.message)}`)
+  redirect(result.ok ? `${PAGE}?salvo=1` : `${PAGE}?erro=${errorCodeFor(result.message)}`)
 }
 
 export type DiscoverResult =
@@ -66,19 +84,31 @@ export async function discoverItemsAction(): Promise<DiscoverResult> {
     return { ok: true, ...(await discoverItems(productionDeps(), user.id)) }
   } catch (e) {
     console.error(`falha ao buscar itens: ${safeErrorMessage(e)}`)
-    return { ok: false, message: 'Não foi possível consultar a Pluggy. Confira as credenciais no passo 2.' }
+    return { ok: false, message: 'Não foi possível falar com a Pluggy. Tente de novo.' }
   }
 }
+
+const ADD_FAILED = 'Não foi possível adicionar a conexão. Confira o Item ID e tente de novo.'
+const INVALID_ITEM = 'Item ID inválido'
 
 export async function addItemsAction(itemIds: string[]): Promise<{ ok: true } | { ok: false; message: string }> {
   const user = await requireUser()
   const deps = productionDeps()
-  try {
-    // Sequencial: cada sync consulta a Pluggy e grava 90 dias de histórico.
-    for (const id of itemIds.slice(0, 20)) await addItem(deps, user.id, String(id).trim())
-    return { ok: true }
-  } catch (e) {
-    // addItem/runSync já relançam mensagens sanitizadas.
-    return { ok: false, message: safeErrorMessage(e) }
+  const ids = itemIds.slice(0, 20)
+  let added = 0
+  let invalid = false
+  // Sequencial: cada sync consulta a Pluggy e grava 90 dias de histórico. Uma falha não interrompe as demais.
+  for (const id of ids) {
+    try {
+      await addItem(deps, user.id, String(id).trim())
+      added++
+    } catch (e) {
+      const detail = safeErrorMessage(e)
+      if (detail === INVALID_ITEM) invalid = true
+      console.error(`falha ao adicionar item: ${detail}`)
+    }
   }
+  if (added === ids.length) return { ok: true }
+  if (added === 0) return { ok: false, message: invalid && ids.length === 1 ? INVALID_ITEM : ADD_FAILED }
+  return { ok: false, message: `${added} de ${ids.length} conexões adicionadas. Tente de novo para as demais.` }
 }

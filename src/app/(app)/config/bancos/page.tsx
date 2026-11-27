@@ -3,6 +3,12 @@ import { requireUser } from '@/lib/supabase/server'
 import { saveCredentialsAction } from './actions'
 import { ConnectWidget } from './connect-widget'
 
+const ERROR_MESSAGES: Record<string, string> = {
+  credenciais: 'Client ID ou Secret incorretos. Confira no dashboard da Pluggy.',
+  'app-url': 'APP_URL não configurada.',
+  falha: 'Não foi possível concluir a configuração. Tente de novo.',
+}
+
 export const metadata = { title: 'Conectar bancos' }
 
 export default async function BancosPage({ searchParams }: { searchParams: Promise<{ erro?: string; salvo?: string }> }) {
@@ -35,7 +41,7 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
           aplicação e cole o Client ID e o Client Secret abaixo.
         </p>
         {salvo && <p role="status">Credenciais salvas.</p>}
-        {erro && <p role="alert">{erro}</p>}
+        {erro && <p role="alert">{ERROR_MESSAGES[erro] ?? ERROR_MESSAGES.falha}</p>}
         <form action={saveCredentialsAction}>
           <label>
             Client ID
