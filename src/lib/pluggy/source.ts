@@ -11,7 +11,7 @@ export interface PluggySource {
   /** `from` no formato YYYY-MM-DD. */
   fetchTransactions(accountId: string, from: string): Promise<Transaction[]>
   createConnectToken(): Promise<string>
-  /** Registra o webhook e devolve o id. O segredo é enviado no header `x-webhook-secret`. */
+  /** Registra o webhook e devolve o id. O segredo é enviado no header `x-vc-secret`. */
   registerWebhook(url: string, secret: string): Promise<string>
 }
 
@@ -46,7 +46,7 @@ export function createPluggySource(clientId: string, clientSecret: string): Plug
       return (await client.createConnectToken()).accessToken
     },
     async registerWebhook(url, secret) {
-      const w = await client.createWebhook('all', url, { 'x-webhook-secret': secret })
+      const w = await client.createWebhook('all', url, { 'x-vc-secret': secret })
       return w.id
     },
   }
