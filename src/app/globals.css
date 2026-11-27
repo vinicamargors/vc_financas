@@ -119,7 +119,8 @@ a {
 /* Todo valor em dinheiro: mono com algarismos alinhados. */
 .money,
 .num {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
@@ -198,7 +199,8 @@ a {
 }
 
 .big {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
   font-size: 2.4rem;
   line-height: 1.15;
   font-weight: 600;
@@ -371,7 +373,8 @@ a {
   color: #0b0b0c;
   display: grid;
   place-items: center;
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 0.85rem;
   flex: none;
@@ -501,7 +504,8 @@ a {
 
 .tag {
   display: inline-block;
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
   font-size: 0.68rem;
   font-weight: 600;
   padding: 1px 7px;
@@ -623,7 +627,8 @@ a {
   outline: 0;
   background: transparent;
   color: var(--fg);
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
   font-size: 1rem;
   padding: 2px 0 0;
 }

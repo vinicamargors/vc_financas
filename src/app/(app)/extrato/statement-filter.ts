@@ -29,7 +29,10 @@ export function filterDays(days: DayGroup<StatementTx>[], filter: Filter): DayGr
 
 /** Duas letras para o círculo: iniciais das duas primeiras palavras, ou as duas primeiras letras. */
 export function initials(description: string): string {
-  const words = description.match(/[\p{L}\p{N}]+/gu) ?? []
+  const STOP = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'a', 'o', 'para'])
+  const all = description.match(/[\p{L}\p{N}]+/gu) ?? []
+  const words = all.filter((w) => !STOP.has(w.toLowerCase()))
+  if (words.length === 0) words.push(...all)
   const [a, b] = words
   if (!a) return '·'
   return (b ? a.charAt(0) + b.charAt(0) : a.slice(0, 2)).toUpperCase()

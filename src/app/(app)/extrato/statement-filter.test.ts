@@ -36,5 +36,6 @@ describe('initials', () => {
   it('duas palavras', () => expect(initials('Posto Ipiranga')).toBe('PI'))
   it('uma palavra', () => expect(initials('Netflix')).toBe('NE'))
   it('ignora símbolos', () => expect(initials('*** pix - maria')).toBe('PM'))
+  it('ignora preposições', () => expect(initials('Cantina do Tio Marcelo')).toBe('CT'))
   it('vazio', () => expect(initials('---')).toBe('·'))
 })
