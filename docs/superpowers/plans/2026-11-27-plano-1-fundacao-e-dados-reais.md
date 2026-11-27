@@ -109,7 +109,7 @@ expect(toLocalDate('2026-11-28T03:00:00Z')).toBe('2026-11-28')
 ### Task 3: Login por convite (link mágico)
 
 **Files:**
-- Create: `supabase/migrations/20261127000200_invite_hook.sql`; modificar `supabase/config.toml` (`[auth.hook.before_user_created]`)
+- Create: `supabase/migrations/20261127000200_invite_hook.sql`; modificar `supabase/config.jsonc` (hook `before_user_created`)
 - Create: `src/lib/supabase/server.ts`, `src/lib/supabase/client.ts`, `src/lib/supabase/admin.ts`, `src/middleware.ts`, `src/app/login/page.tsx`, `src/app/login/actions.ts`, `src/app/auth/callback/route.ts`
 - Test: `supabase/tests/invite_hook.test.sql`
 
@@ -122,7 +122,7 @@ expect(toLocalDate('2026-11-28T03:00:00Z')).toBe('2026-11-28')
   - `hook_before_user_created('{"user":{"email":"B@Y.com"}}')` → `->'error'->>'http_code' = '403'`.
   - Comparação de e-mail sem diferenciar maiúsculas.
 - [ ] **Step 2:** `npx supabase test db` → FAIL.
-- [ ] **Step 3:** Implementar a função (`security definer`, `grant execute ... to supabase_auth_admin`), ligar o hook no `config.toml`. Mensagem de erro: `"Este e-mail não foi convidado."`
+- [ ] **Step 3:** Implementar a função (`security definer`, `grant execute ... to supabase_auth_admin`), ligar o hook no `config.jsonc`. Mensagem de erro: `"Este e-mail não foi convidado."`
 - [ ] **Step 4:** `npx supabase test db` → PASS.
 - [ ] **Step 5:** Clientes Supabase com `@supabase/ssr`; `middleware.ts` renova sessão e manda não logados de qualquer rota (exceto `/login`, `/auth/*`, `/api/webhooks/*`, `/api/cron/*`, `/manifest.webmanifest`, ícones) para `/login`. Página de login: campo e-mail + "Enviar link"; após envio: "Enviamos um link para seu e-mail." Erro de convite mostra a mensagem do hook.
 - [ ] **Step 6:** Verificação manual com stack local: `insert into allowed_emails values ('teste@local')`; pedir link; abrir no Inbucket (`http://localhost:54324`); cair em `/` logado. E-mail não convidado vê "Este e-mail não foi convidado."
@@ -194,7 +194,7 @@ expect(toLocalDate('2026-11-28T03:00:00Z')).toBe('2026-11-28')
 **Interfaces:**
 - Consumes: `PluggySource`, `mapAccount`, `mapTransaction` (Task 5).
 - Produces:
-  - `interface SyncRepo { getConnection(userId, itemId): Promise<ConnectionRow | null>; upsertConnection(row): Promise<ConnectionRow>; upsertAccounts(rows: AccountRow[]): Promise<{ id: string; externalId: string; type: string }[]>; upsertTransactions(rows: TransactionRow[]): Promise<number>; markTransactionsDeleted(userId, externalIds: string[]): Promise<void>; upsertBalanceSnapshot(userId, accountId, date, balanceCents): Promise<void> }`
+  - `interface SyncRepo { getConnection(userId, itemId): Promise<ConnectionRow | null>; upsertConnection(row): Promise<ConnectionRow>; upsertAccounts(rows: AccountRow[]): Promise<{ id: string; externalId: string; type: string }[]>; upsertTransactions(rows: TransactionRow[]): Promise<number>; markTransactionsDeleted(userId, externalIds: string[]): Promise<void>; upsertBalanceSnapshot(userId, accountId, date, balanceCents): Promise<void> }` (conflict target `user_id,account_id,date`)
   - `createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo` (upserts com `onConflict: 'user_id,external_id'`).
   - `createMemoryRepo(): SyncRepo & { dump(): {...} }` (para testes).
   - `syncItem(deps: { source: PluggySource; repo: SyncRepo; today: string }, userId: string, itemId: string): Promise<{ accounts: number; transactions: number; status: string }>` — `from` = `last_synced_at − 3 dias`, ou `today − 90 dias` na primeira vez; atualiza `connections.status/status_detail/consent_expires_at/last_synced_at`; grava snapshot de saldo do dia por conta.
