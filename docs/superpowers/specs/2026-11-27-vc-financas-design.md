@@ -18,6 +18,8 @@ O app precisa:
 
 Não é SaaS. É ferramenta pessoal, PWA instalada no iPhone, bonita e fácil de ler. Custo zero.
 
+**Princípio: agnóstico.** Feito para a necessidade do dono, mas não só dele. Nada de nomes, bancos, categorias, dias de salário ou compromissos fixos no código. Tudo que aparece nos exemplos (Igreja, Mãe, Gasolina, Casa, Bradesco) é configuração do usuário.
+
 ## 2. Objetivos, não-objetivos, anti-objetivos
 
 **Objetivos**
@@ -74,13 +76,16 @@ Fonte de dados também foi decidida em conversa: **híbrido** — Pluggy (fonte 
 ## 5. Decisões do dono
 
 1. **Individual.** Cada pessoa vê só o seu. Sem visão de casal.
-2. **Regime de competência no cartão.** Compra de R$ 1.200 em 12x = R$ 100/mês em cada mês de parcela. Pagamento de fatura = movimentação neutra (não é gasto). App mostra "fatura a pagar" como compromisso.
+2. **Duas lentes, sem dupla contagem.**
+   - **Gastos e categorias = competência.** Compra de R$ 1.200 em 12x = R$ 100 em cada ciclo de parcela. Pagamento de fatura nunca é gasto.
+   - **Livre (dinheiro disponível) = caixa.** "A fatura só sai do líquido quando eu pago." Fatura entra como compromisso do ciclo em que vence; compras no cartão **não** reduzem o livre do ciclo atual.
+   - Na tela inicial, abaixo do livre: "Cartão neste ciclo: R$ X → próximo salário", para o usuário ver o que já comprometeu.
 3. **Categorização em 3 camadas**: regras aprendidas → categoria da Pluggy → Gemini. Gemini aceito pelo dono.
 4. **Ciclo financeiro = de salário a salário** (salário cai no penúltimo dia útil do mês). Não mês do calendário.
-5. **Tela "Dia do pagamento"**: ao cair o salário, mostra distribuição (faturas, mãe, caixinha, igreja, gasolina) marcada automaticamente e o "livre até o próximo salário".
+5. **Tela "Dia do pagamento"**: ao cair o salário, mostra distribuição (faturas e compromissos do usuário) marcada automaticamente e o "livre até o próximo salário".
 6. **"Livre por dia"** é o número principal da tela inicial.
-7. **Compromissos** (pendências): valor fixo (ex.: Mãe R$ 300 via Pix), por categoria (ex.: Gasolina ≥ R$ 400 no ciclo) ou % do salário (ex.: Igreja 10%).
-8. **Salário**: reconhecido pelo pagador (nome/CNPJ vindo da Pluggy), confirmado na primeira vez. PLR, 13º e bônus podem cair em outros dias; o app pergunta o tipo e aprende.
+7. **Compromissos** (pendências), todos criados pelo usuário: valor fixo (ex.: Mãe R$ 300 via Pix), orçamento de categoria (ex.: Gasolina R$ 400 no ciclo) ou % da renda (ex.: 10% para uma categoria personalizada). Para %, o usuário escolhe a base: só salário ou toda renda.
+8. **Salário**: reconhecido pelo pagador (nome/CNPJ vindo da Pluggy), confirmado na primeira vez. Regra de data configurável (dono: penúltimo dia útil; outras: dia fixo, quinto dia útil etc.). PLR, 13º e bônus podem cair em outros dias; o app pergunta o tipo e aprende.
 9. **Transação duvidosa** (ex.: Pix de R$ 3.000 a desconhecido sem par): **fora do total**, mas visível como "+ R$ X a confirmar", resolvida na revisão da noite.
 10. **Caixinhas múltiplas**, cada uma com seu % do CDI (ex.: 105%, 120%, 130%). Detalhe por caixinha + visão consolidada (total, rendimento acumulado, rendimento por dia, projeção).
 11. **Meta "Casa"**: caixinha no Mercado Pago + FGTS mostrados **separados**, com "potencial de entrada" somado. Meta aberta (sem valor alvo); aporte planejado R$ 1.500–2.000/mês.
@@ -157,17 +162,21 @@ Toda classificação manual pode gerar regra ("lembrar para as próximas").
 
 ### 6.5 Ciclo financeiro e "livre por dia"
 
-- Ciclo começa no dia em que o salário cai (real) e termina na véspera do próximo salário previsto (penúltimo dia útil do mês seguinte, com feriados nacionais).
+- Ciclo começa no dia em que o salário cai (real) e termina na véspera do próximo salário previsto (regra de data do usuário, com feriados nacionais).
 - Antes do primeiro salário detectado: usa a data prevista.
-- **Livre no ciclo** = renda do ciclo − compromissos previstos do ciclo − gastos variáveis já feitos fora de compromissos.
+- **Usuário sem salário regular** (decisão do construtor): ciclo = mês do calendário ou dia de início escolhido.
+- **Livre no ciclo (caixa)** = salário do ciclo − compromissos do ciclo (incluindo faturas que vencem nele) − saídas à vista fora de compromissos (Pix, débito, boleto, saque).
+- Compras no cartão **não** reduzem o livre do ciclo; aparecem como "Cartão neste ciclo → próximo salário" e viram a fatura do ciclo seguinte.
 - **Livre por dia** = livre restante ÷ dias restantes no ciclo.
-- Compras no cartão entram por **competência** (data da compra / parcela do mês), não pelo pagamento da fatura.
+- **Gasto real** (tela inicial, categorias, relatórios) = competência: compras do ciclo (cartão por data/parcela + à vista). Exclui transferência, fatura, aporte, resgate e itens a confirmar.
+- **Renda extra** (PLR, 13º, bônus): não abre ciclo novo. Ao cair, o app pergunta "Distribuir R$ X?" com atalhos: mandar para uma caixinha, somar ao livre, ou parte de cada. Só soma ao livre o que o usuário escolher.
+- **Estorno**: abate a compra original (no ciclo dela para gasto real; no livre do ciclo atual se a compra foi à vista).
 
 ### 6.6 Compromissos
 
 - `fixed`: marcado quando aparece transação que casa (contraparte + valor ±10%).
-- `category_budget`: soma dos gastos da categoria no ciclo até o valor.
-- `percent_of_income`: % do salário do ciclo.
+- `category_budget`: reserva o valor no livre. Gastar acima → excesso sai do livre. Sobra → liberada no livre só no fim do ciclo.
+- `percent_of_income`: % da renda do ciclo, base escolhida pelo usuário (só salário ou toda renda).
 - Faturas aparecem automaticamente como compromisso (valor da fatura fechada, vencimento).
 - Sugestão automática: gasto recorrente com mesma contraparte por 3 ciclos seguidos → "Virar compromisso?".
 
@@ -211,7 +220,17 @@ Botão de olho oculta valores em todas as telas. Tema claro/escuro seguindo o si
 - Lembrete trimestral do saldo do FGTS.
 - Limite de categoria atingido.
 
-### 6.11 Multiusuário e onboarding
+### 6.11 Importação inicial (histórico)
+
+- Primeiro sync importa **90 dias** (ou o máximo que a Pluggy entregar, se menor).
+- Histórico é classificado **em silêncio** (regras + Pluggy + detecção de transferências). Não vai para a revisão da noite.
+- Sessão única de onboarding: "Ensine os 20 lugares mais frequentes" (nome + categoria). Gera regras que reclassificam o histórico.
+- Revisão da noite e "a confirmar" cobrem só o ciclo atual em diante.
+- Histórico alimenta: ritmo atual (3 ciclos), sugestão de compromissos e recorrências, comparação com ciclo anterior.
+- Rendimento das caixinhas conta a partir da primeira observação; tela mostra "rendeu R$ X desde dd/mm".
+- **Primeiro ciclo:** faturas pagas nele são compromissos normais (já é o comportamento de caixa), então não há caso especial para o livre.
+
+### 6.12 Multiusuário e onboarding
 
 - Login Supabase Auth (e-mail com link mágico). Sem cadastro aberto: o dono convida (lista de e-mails permitidos).
 - Onboarding: (1) instalar PWA, (2) assistente Pluggy, (3) Atalho do iPhone, (4) salário e dia, (5) compromissos sugeridos a partir do histórico.
