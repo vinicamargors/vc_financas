@@ -3,7 +3,7 @@ import { GlassCard } from '@/components/glass/glass-card'
 import { Money } from '@/components/money'
 import { ConnectionStatus } from '@/components/connection-status'
 import { formatTime } from '@/lib/format/date'
-import { loadHomeData } from '@/lib/queries/balances'
+import { loadHomeData, oldestHealthySync } from '@/lib/queries/balances'
 import { requireUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic'
 export default async function InicioPage() {
   await requireUser()
   const { connections, summary } = await loadHomeData()
+  const syncedAt = oldestHealthySync(connections)
 
   if (connections.length === 0) {
     return (
@@ -32,7 +33,7 @@ export default async function InicioPage() {
       <GlassCard as="section" className="p-5" aria-labelledby="saldo-titulo">
         <div className="flex items-baseline justify-between gap-2">
           <h1 id="saldo-titulo" className="text-sm font-medium text-muted">Saldo em conta</h1>
-          {summary.updatedAt && <span className="text-xs text-muted">atualizado {formatTime(summary.updatedAt)}</span>}
+          {syncedAt && <span className="text-xs text-muted">atualizado {formatTime(syncedAt)}</span>}
         </div>
         <p className="mt-1 text-3xl font-bold">
           <Money cents={summary.totalCents} />

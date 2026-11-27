@@ -30,16 +30,27 @@ export type StatementTx = DayTx & {
 export async function loadStatement(days = 90): Promise<DayGroup<StatementTx>[]> {
   const supabase = await createServerSupabase()
   const since = toLocalDate(subDays(new Date(), days))
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('id, date, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, accounts(institution, name)')
-    .is('deleted_at', null)
-    .gte('date', since)
-    .order('date', { ascending: false })
-    .order('created_at', { ascending: false })
-  if (error) throw new Error('Falha ao carregar o extrato')
+  const PAGE = 1000
+  const rows: NonNullable<Awaited<ReturnType<typeof fetchPage>>['data']> = []
+  async function fetchPage(from: number) {
+    return supabase
+      .from('transactions')
+      .select('id, date, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, accounts(institution, name)')
+      .is('deleted_at', null)
+      .gte('date', since)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + PAGE - 1)
+  }
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await fetchPage(from)
+    if (error) throw new Error('Falha ao carregar o extrato')
+    rows.push(...(data ?? []))
+    if ((data ?? []).length < PAGE) break
+  }
   return groupByDay(
-    (data ?? []).map((t) => {
+    rows.map((t) => {
       const acc = Array.isArray(t.accounts) ? t.accounts[0] : t.accounts
       return {
         id: t.id,

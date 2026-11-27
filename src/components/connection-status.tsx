@@ -15,7 +15,9 @@ export function connectionNotices(connections: ConnectionRow[], now: Date = new 
     }
     if (c.consentExpiresAt) {
       const left = new Date(c.consentExpiresAt).getTime() - now.getTime()
-      if (left <= RENEW_WINDOW_MS) {
+      if (left < 0) {
+        out.push({ id: `${c.id}-consent`, kind: 'reconnect', text: `${c.connectorName}: autorização expirada, reconecte seu banco` })
+      } else if (left <= RENEW_WINDOW_MS) {
         out.push({ id: `${c.id}-consent`, kind: 'renew', text: `${c.connectorName}: renovar até ${formatDayMonth(c.consentExpiresAt)}` })
       }
     }

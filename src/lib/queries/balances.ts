@@ -27,13 +27,14 @@ export type ConnectionRow = {
   connectorName: string
   status: string
   consentExpiresAt: string | null
+  lastSyncedAt: string | null
 }
 
 export async function loadHomeData(): Promise<{ connections: ConnectionRow[]; summary: CheckingSummary }> {
   const supabase = await createServerSupabase()
   const [conns, accs] = await Promise.all([
-    supabase.from('connections').select('id, connector_name, status, consent_expires_at'),
-    supabase.from('accounts').select('institution, type, subtype, balance_cents, updated_at'),
+    supabase.from('connections').select('id, connector_name, status, consent_expires_at, last_synced_at'),
+    supabase.from('accounts').select('institution, name, type, subtype, balance_cents, updated_at'),
   ])
   if (conns.error) throw new Error('Falha ao carregar conexões')
   if (accs.error) throw new Error('Falha ao carregar contas')
@@ -43,10 +44,11 @@ export async function loadHomeData(): Promise<{ connections: ConnectionRow[]; su
       connectorName: c.connector_name,
       status: c.status,
       consentExpiresAt: c.consent_expires_at,
+      lastSyncedAt: c.last_synced_at,
     })),
     summary: summarizeCheckingBalances(
       (accs.data ?? []).map((a) => ({
-        institution: a.institution ?? 'Conta',
+        institution: a.institution ?? a.name,
         type: a.type,
         subtype: a.subtype ?? '',
         balanceCents: Number(a.balance_cents),
@@ -54,4 +56,14 @@ export async function loadHomeData(): Promise<{ connections: ConnectionRow[]; su
       })),
     ),
   }
+}
+
+/** Sincronização mais antiga entre conexões saudáveis (UPDATED/UPDATING) com data conhecida. */
+export function oldestHealthySync(connections: ConnectionRow[]): string | null {
+  let oldest: string | null = null
+  for (const c of connections) {
+    if (!['UPDATED', 'UPDATING'].includes(c.status) || !c.lastSyncedAt) continue
+    if (oldest === null || new Date(c.lastSyncedAt) < new Date(oldest)) oldest = c.lastSyncedAt
+  }
+  return oldest
 }

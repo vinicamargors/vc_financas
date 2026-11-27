@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { connectionNotices } from './connection-status'
 
 const now = new Date('2026-11-27T12:00:00Z')
-const c = (status: string, consentExpiresAt: string | null = null) => ({ id: '1', connectorName: 'Banco X', status, consentExpiresAt })
+const c = (status: string, consentExpiresAt: string | null = null) => ({ id: '1', connectorName: 'Banco X', status, consentExpiresAt, lastSyncedAt: null })
 
 describe('connectionNotices', () => {
   it('saudável não avisa', () => {
@@ -17,5 +17,8 @@ describe('connectionNotices', () => {
   })
   it('consentimento distante não avisa', () => {
     expect(connectionNotices([c('UPDATED', '2027-03-01T00:00:00Z')], now)).toEqual([])
+  })
+  it('consentimento expirado pede reconexão', () => {
+    expect(connectionNotices([c('UPDATED', '2026-11-01T00:00:00Z')], now)[0].text).toBe('Banco X: autorização expirada, reconecte seu banco')
   })
 })
