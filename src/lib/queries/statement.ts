@@ -1,6 +1,7 @@
 import { subDays } from 'date-fns'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { toLocalDate } from '@/lib/format/date'
+import { logoMap } from './logos'
 
 export type DayTx = { date: string; amountCents: number; deletedAt: string | null }
 export type DayGroup<T extends DayTx> = { date: string; totalCents: number; items: T[] }
@@ -22,6 +23,7 @@ export type StatementTx = DayTx & {
   id: string
   description: string
   accountLabel: string
+  logoUrl: string | null
   cardLast4: string | null
   installmentNumber: number | null
   installmentTotal: number | null
@@ -43,6 +45,9 @@ export async function loadStatement(days = 90): Promise<DayGroup<StatementTx>[]>
       .order('id', { ascending: false })
       .range(from, from + PAGE - 1)
   }
+  const conns = await supabase.from('connections').select('connector_name, connector_image_url')
+  if (conns.error) throw new Error('Falha ao carregar conexões')
+  const logos = logoMap(conns.data ?? [])
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await fetchPage(from)
     if (error) throw new Error('Falha ao carregar o extrato')
@@ -59,6 +64,7 @@ export async function loadStatement(days = 90): Promise<DayGroup<StatementTx>[]>
         deletedAt: t.deleted_at,
         description: t.description_raw,
         accountLabel: acc?.institution ?? acc?.name ?? '',
+        logoUrl: logos.get(acc?.institution ?? '') ?? null,
         cardLast4: t.card_last4,
         installmentNumber: t.installment_number,
         installmentTotal: t.installment_total,

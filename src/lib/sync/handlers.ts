@@ -98,6 +98,7 @@ export async function runSyncRecordingFailure(
           userId: existing.userId,
           pluggyItemId: existing.pluggyItemId,
           connectorName: existing.connectorName,
+          connectorImageUrl: existing.connectorImageUrl ?? null,
           consentExpiresAt: existing.consentExpiresAt,
           lastSyncedAt: existing.lastSyncedAt,
           status: 'SYNC_ERROR',

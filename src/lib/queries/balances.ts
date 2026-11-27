@@ -1,3 +1,4 @@
+import { logoMap } from './logos'
 import { createServerSupabase } from '@/lib/supabase/server'
 
 export type BalanceAccount = { institution: string; type: string; subtype: string; balanceCents: number; updatedAt: string }
@@ -30,15 +31,16 @@ export type ConnectionRow = {
   lastSyncedAt: string | null
 }
 
-export async function loadHomeData(): Promise<{ connections: ConnectionRow[]; summary: CheckingSummary }> {
+export async function loadHomeData(): Promise<{ connections: ConnectionRow[]; summary: CheckingSummary; logos: Map<string, string> }> {
   const supabase = await createServerSupabase()
   const [conns, accs] = await Promise.all([
-    supabase.from('connections').select('id, connector_name, status, consent_expires_at, last_synced_at'),
+    supabase.from('connections').select('id, connector_name, connector_image_url, status, consent_expires_at, last_synced_at'),
     supabase.from('accounts').select('institution, name, type, subtype, balance_cents, updated_at'),
   ])
   if (conns.error) throw new Error('Falha ao carregar conexões')
   if (accs.error) throw new Error('Falha ao carregar contas')
   return {
+    logos: logoMap(conns.data ?? []),
     connections: (conns.data ?? []).map((c) => ({
       id: c.id,
       connectorName: c.connector_name,

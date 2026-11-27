@@ -869,3 +869,16 @@ a {
     scroll-behavior: auto !important;
   }
 }
+
+/* Logo do banco ao lado do nome. */
+.bank-logo {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  object-fit: contain;
+  vertical-align: -3px;
+  margin-right: 6px;
+  flex: none;
+  background: var(--surface-2);
+}

@@ -7,6 +7,8 @@ export interface ConnectionRow {
   userId: string
   pluggyItemId: string
   connectorName: string
+  /** Logo oficial do banco (Pluggy `connector.imageUrl`). */
+  connectorImageUrl?: string | null
   status: string
   statusDetail: string | null
   consentExpiresAt: string | null
@@ -39,6 +41,7 @@ interface ConnectionDb {
   user_id: string
   pluggy_item_id: string
   connector_name: string
+  connector_image_url: string | null
   status: string
   status_detail: string | null
   consent_expires_at: string | null
@@ -51,6 +54,7 @@ const fromDb = (r: ConnectionDb): ConnectionRow => ({
   userId: r.user_id,
   pluggyItemId: r.pluggy_item_id,
   connectorName: r.connector_name,
+  connectorImageUrl: r.connector_image_url,
   status: r.status,
   statusDetail: r.status_detail,
   consentExpiresAt: r.consent_expires_at,
@@ -79,6 +83,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
             user_id: row.userId,
             pluggy_item_id: row.pluggyItemId,
             connector_name: row.connectorName,
+            connector_image_url: row.connectorImageUrl ?? null,
             status: row.status,
             status_detail: row.statusDetail,
             consent_expires_at: row.consentExpiresAt,

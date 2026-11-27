@@ -54,6 +54,7 @@ export async function syncItem(deps: SyncDeps, userId: string, itemId: string): 
     userId,
     pluggyItemId: itemId,
     connectorName: item.connector?.name ?? existing?.connectorName ?? '',
+    connectorImageUrl: item.connector?.imageUrl ?? existing?.connectorImageUrl ?? null,
     status: item.status,
     statusDetail: item.error?.code ?? item.executionStatus ?? null,
     consentExpiresAt: item.consentExpiresAt ? new Date(item.consentExpiresAt).toISOString() : null,
