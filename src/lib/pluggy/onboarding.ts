@@ -5,7 +5,8 @@ export interface CredentialsRow {
   clientId: string
   clientSecretEnc: string
   webhookSecret: string
-  webhookId: string
+  /** Nulo quando a Pluggy recusa o webhook: a sync diária cobre. */
+  webhookId: string | null
 }
 
 export interface OnboardingDeps {
@@ -29,7 +30,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const INVALID_CREDENTIALS_MESSAGE = 'Client ID ou Secret incorretos. Confira no dashboard da Pluggy.'
 const NETWORK_MESSAGE = 'Não foi possível falar com a Pluggy agora. Tente de novo em instantes.'
 export const APP_URL_MISSING_MESSAGE = 'APP_URL não configurada.'
-const SAVE_FAILED_MESSAGE = 'Não foi possível concluir a configuração. Tente de novo.'
+export const KEY_INVALID_MESSAGE = 'CREDENTIALS_KEY inválida na Vercel. Gere com: openssl rand -base64 32'
+export const DB_FAILED_MESSAGE = 'Não foi possível salvar no Supabase. Confira SUPABASE_SERVICE_ROLE_KEY na Vercel.'
 
 function validAppUrl(raw: string): string | null {
   try {
@@ -66,20 +68,29 @@ export async function saveCredentials(
     console.error(`falha ao remover webhook antigo: ${safeErrorMessage(e)}`)
   }
 
+  let clientSecretEnc: string
+  try {
+    clientSecretEnc = deps.seal(secret)
+  } catch (e) {
+    console.error(`falha ao cifrar credenciais: ${safeErrorMessage(e)}`)
+    return { ok: false, message: KEY_INVALID_MESSAGE }
+  }
+
   const source = deps.createSource(id, secret)
+  const webhookSecret = deps.randomHex()
   let webhookId: string | null = null
   try {
-    const webhookSecret = deps.randomHex()
     webhookId = await source.registerWebhook(`${base}/api/webhooks/pluggy`, webhookSecret)
-    await deps.saveCredentialsRow(userId, {
-      clientId: id,
-      clientSecretEnc: deps.seal(secret),
-      webhookSecret,
-      webhookId,
-    })
+  } catch (e) {
+    // Sem webhook o app ainda funciona: a sync diária busca os dados.
+    // Erros do SDK carregam headers com segredos: só a mensagem sanitizada é registrada.
+    console.error(`webhook Pluggy não registrado: ${safeErrorMessage(e)}`)
+  }
+
+  try {
+    await deps.saveCredentialsRow(userId, { clientId: id, clientSecretEnc, webhookSecret, webhookId })
     return { ok: true }
   } catch (e) {
-    // Erros do SDK carregam headers com segredos: só a mensagem sanitizada é registrada.
     console.error(`falha ao salvar credenciais Pluggy: ${safeErrorMessage(e)}`)
     if (webhookId) {
       try {
@@ -88,7 +99,7 @@ export async function saveCredentials(
         console.error(`falha ao remover webhook novo: ${safeErrorMessage(cleanup)}`)
       }
     }
-    return { ok: false, message: SAVE_FAILED_MESSAGE }
+    return { ok: false, message: DB_FAILED_MESSAGE }
   }
 }
 

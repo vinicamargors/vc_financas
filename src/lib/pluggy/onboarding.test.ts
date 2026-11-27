@@ -4,7 +4,7 @@ import { open, seal } from '@/lib/crypto/secret-box'
 import { createMemoryRepo } from '@/lib/sync/memory-repo'
 import { syncItem } from '@/lib/sync/sync-item'
 import type { PluggySource } from './source'
-import { addItem, APP_URL_MISSING_MESSAGE, discoverItems, saveCredentials, type CredentialsRow, type OnboardingDeps } from './onboarding'
+import { addItem, APP_URL_MISSING_MESSAGE, DB_FAILED_MESSAGE, KEY_INVALID_MESSAGE, discoverItems, saveCredentials, type CredentialsRow, type OnboardingDeps } from './onboarding'
 
 const KEY = Buffer.alloc(32, 7).toString('base64')
 const U = 'user-1'
@@ -75,15 +75,26 @@ describe('saveCredentials', () => {
     expect(registerWebhook).toHaveBeenCalledWith('https://app.example/api/webhooks/pluggy', row.webhookSecret)
   })
 
-  it('falha ao registrar webhook: não salva e não vaza detalhes do SDK', async () => {
+  it('falha ao registrar webhook: salva mesmo assim, sem webhook, e não vaza detalhes do SDK', async () => {
     const boom = Object.assign(new Error('x'), { code: 500, request: { headers: { 'x-api-key': 'LEAK' } } })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { deps, saved } = setup({
       createSource: vi.fn(() => fakeSource({ registerWebhook: async () => Promise.reject(boom) })),
     })
     const r = await saveCredentials(deps, U, 'id', 'secret')
-    expect(r.ok).toBe(false)
-    expect(JSON.stringify(r)).not.toContain('LEAK')
+    expect(r.ok).toBe(true)
+    expect(saved).toHaveLength(1)
+    expect(saved[0].row.webhookId).toBeNull()
+    expect(JSON.stringify(log.mock.calls)).not.toContain('LEAK')
+    log.mockRestore()
+  })
+
+  it('CREDENTIALS_KEY inválida: mensagem específica e nada salvo', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { deps, saved } = setup({ seal: () => { throw new Error('CREDENTIALS_KEY inválida') } })
+    expect(await saveCredentials(deps, U, 'id', 'secret')).toEqual({ ok: false, message: KEY_INVALID_MESSAGE })
     expect(saved).toHaveLength(0)
+    log.mockRestore()
   })
 })
 
@@ -116,7 +127,7 @@ describe('saveCredentials: webhooks e APP_URL', () => {
       createSource: () => fakeSource({ registerWebhook: async () => 'wh-new', deleteWebhook }),
       saveCredentialsRow: async () => Promise.reject(new Error('db')),
     })
-    expect((await saveCredentials(deps, U, 'id', 'secret')).ok).toBe(false)
+    expect(await saveCredentials(deps, U, 'id', 'secret')).toEqual({ ok: false, message: DB_FAILED_MESSAGE })
     expect(deleteWebhook).toHaveBeenCalledWith('wh-new')
   })
 
