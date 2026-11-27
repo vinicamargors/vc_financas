@@ -1,7 +1,7 @@
 # VC Finanças — Design
 
 Data: 2026-11-27
-Status: rascunho para aprovação
+Status: aprovado pelo dono em 2026-11-27
 Protótipo de telas (valores de exemplo): https://claude.ai/artifact/HEaGBZAvN8fmVMCJ7f9DpK
 
 ## 1. Intenção e porquê
@@ -92,7 +92,10 @@ Fonte de dados também foi decidida em conversa: **híbrido** — Pluggy (fonte 
 12. **FGTS**: dono informa salário bruto fixo uma vez; app estima depósito mensal a partir do líquido que entrou (para refletir hora extra); saldo real informado a cada ~3 meses corrige a estimativa.
 13. **Acompanhamento por categoria**: barras por categoria no ciclo, comparação com ciclo anterior, limites por categoria.
 14. **Família no Pluggy**: caminho gratuito com **assistente guiado** dentro do app (cada pessoa cria a própria conta Meu Pluggy + credenciais de desenvolvedor; ~10 min, uma vez).
-15. **Visual**: dono aprovou a direção do protótipo (limpo, claro/escuro). Botão de olho para ocultar valores.
+15. **Visual: Liquid Glass** (linguagem visual do iOS 26). Superfícies translúcidas com desfoque do fundo (`backdrop-filter`), bordas com brilho sutil, barra de abas flutuante, cantos generosos. Estrutura e hierarquia do protótipo aprovadas. Claro/escuro seguindo o sistema. Botão de olho para ocultar valores.
+    - Números e valores sempre com contraste alto sobre o vidro (legibilidade vem antes do efeito).
+    - Respeitar "Reduzir transparência" e `prefers-reduced-motion`: vidro vira superfície sólida.
+    - Desfoque com moderação para não pesar no iPhone (poucas camadas de vidro por tela).
 
 ## 6. Design
 
