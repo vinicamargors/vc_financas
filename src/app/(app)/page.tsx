@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Money } from '@/components/money'
-import { BankDot } from '@/components/bank-dot'
+import { BankMark } from '@/components/bank-mark'
 import { Icon, type IconName } from '@/components/icons'
 import { ConnectionStatus } from '@/components/connection-status'
 import { formatDayLabel, formatTime, toLocalDate } from '@/lib/format/date'
@@ -50,7 +50,7 @@ function QuickActions() {
 export default async function InicioPage() {
   const user = await requireUser()
   const supabase = await createServerSupabase()
-  const [{ connections, summary }, profile] = await Promise.all([
+  const [{ connections, summary, logos }, profile] = await Promise.all([
     loadHomeData(),
     supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
   ])
@@ -96,7 +96,7 @@ export default async function InicioPage() {
           <ul className="banks">
             {summary.byInstitution.map((i) => (
               <li key={i.institution}>
-                <BankDot institution={i.institution} />
+                <BankMark institution={i.institution} logoUrl={logos.get(i.institution)} />
                 {i.institution}
                 <Money cents={i.balanceCents} currency="none" />
               </li>
