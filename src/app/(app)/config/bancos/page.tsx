@@ -153,6 +153,15 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
       )}
 
       <section className="step">
+        <h2>Ciclo do salário</h2>
+        <p>Salário, compromissos e o resumo do Dia do pagamento.</p>
+        <p>
+          <Link href="/config/salario">Salário</Link> · <Link href="/config/compromissos">Compromissos</Link> ·{' '}
+          <Link href="/pagamento">Dia do pagamento</Link>
+        </p>
+      </section>
+
+      <section className="step">
         <h2>Atalho do iPhone</h2>
         <p>Compras no Apple Pay entram na hora, antes da Pluggy.</p>
         <Link href="/config/atalho" className="btn secondary">

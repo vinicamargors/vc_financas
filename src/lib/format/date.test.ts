@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TZ, formatDayLabel, formatDayMonth, formatTime, toLocalDate } from './date'
-import { isDateOnly, transactionDate } from './date'
+import { formatLocalDayMonth, isDateOnly, transactionDate } from './date'
 
 describe('toLocalDate', () => {
   it('usa America/Sao_Paulo', () => {
@@ -31,5 +31,11 @@ describe('transactionDate', () => {
   it('com hora converte para Brasília', () => {
     expect(transactionDate('2026-11-28T02:30:00.000Z')).toBe('2026-11-27')
     expect(isDateOnly('2026-11-28T02:30:00.000Z')).toBe(false)
+  })
+})
+
+describe('formatLocalDayMonth', () => {
+  it('dd/MM sem mexer no fuso', () => {
+    expect(formatLocalDayMonth('2026-12-01')).toBe('01/12')
   })
 })

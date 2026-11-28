@@ -1263,3 +1263,122 @@ a.btn {
   font-size: 1rem;
   padding: 2px 0 0;
 }
+
+/* ---------- livre por dia, Dia do pagamento e compromissos ---------- */
+
+.balance.secondary {
+  padding-top: 6px;
+}
+.balance.secondary .big {
+  font-size: 1.5rem;
+}
+.big.bad,
+.pay-big.bad {
+  color: var(--bad);
+}
+.big .over {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.pay-salary,
+.pay-free {
+  padding: 14px 0;
+}
+.pay-free {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+.pay-big {
+  font-variant-numeric: tabular-nums;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  margin: 6px 0 0;
+}
+.pay-big small {
+  font-size: 0.95rem;
+  color: var(--muted);
+  font-weight: 500;
+  margin-right: 4px;
+  letter-spacing: 0;
+}
+.pay-hd {
+  padding-top: 6px;
+}
+.pay-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.pay-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.pay-mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 99px;
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.pay-row.done .pay-mark {
+  background: var(--in);
+  color: var(--bg);
+}
+.pay-row.partial .pay-mark {
+  color: var(--warn);
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+.pay-name small {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.pay-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.pay-row.done .pay-val {
+  color: var(--muted);
+}
+
+.cm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cm-form .hint {
+  color: var(--faint);
+  font-size: 0.75rem;
+}
+.cm-ctrl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.cm-btn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.cm-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
