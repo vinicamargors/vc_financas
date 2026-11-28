@@ -72,8 +72,9 @@ export interface ClassifyResult {
 
 const BANK_CARD_PAYMENT = /pagamento.*fatura|pag(to)?\s*fatura|fatura.*cart|pagto cartao|pagamento cartao/i
 const CREDIT_CARD_PAYMENT = /pagamento (recebido|efetuado)|pagto recebido|pagamento de fatura/i
-const INVEST_IN = /aplica[cç][aã]o|apl\.|cofrinho|caixinha|guardar|guardado|investimento/i
-const INVEST_OUT = /resgate|resg\./i
+// Mercado Pago: "Dinheiro reservado <caixinha>" / "Dinheiro retirado <caixinha>".
+const INVEST_IN = /aplica[cç][aã]o|apl\.|cofrinho|caixinha|guardar|guardado|investimento|dinheiro reservado|reserva(do|da)? (para|em)\b/i
+const INVEST_OUT = /resgate|resg\.|dinheiro retirado|dinheiro resgatado|retirad[oa] d[ao] (cofrinho|caixinha|reserva)/i
 const REFUND = /estorno|reembolso|devolu[cç][aã]o|chargeback/i
 const PIX_TED = /\b(pix|ted)\b/i
 /** Descrições de envio a uma pessoa (Bradesco, Nubank, Mercado Pago). Texto já normalizado. */

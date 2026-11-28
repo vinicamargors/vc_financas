@@ -290,3 +290,16 @@ describe('classify', () => {
   })
 })
 
+describe('caixinha do Mercado Pago', () => {
+  const acc = [{ id: 'mp', type: 'BANK' as const }]
+  const base = { accountId: 'mp', date: '2026-11-27', classifiedBy: 'auto' as const, kind: null, linkedTransactionId: null, counterpartyDoc: null, counterpartyName: null, pluggyCategory: null, paymentMethod: null }
+  it('"Dinheiro reservado Casa" é aporte, não gasto', () => {
+    const r = classify([{ ...base, id: 'r1', amountCents: -500000, descriptionRaw: 'Dinheiro reservado Casa' }], { ownerDocs: [], ownerNames: [], accounts: acc, rules: [], merchantsById: {} })
+    expect(r.decisions.find((d) => d.id === 'r1')?.kind).toBe('investment_in')
+  })
+  it('"Dinheiro retirado Casa" é resgate', () => {
+    const r = classify([{ ...base, id: 'r2', amountCents: 100000, descriptionRaw: 'Dinheiro retirado Casa' }], { ownerDocs: [], ownerNames: [], accounts: acc, rules: [], merchantsById: {} })
+    expect(r.decisions.find((d) => d.id === 'r2')?.kind).toBe('investment_out')
+  })
+})
+
