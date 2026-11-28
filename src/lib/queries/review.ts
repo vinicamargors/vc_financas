@@ -2,9 +2,9 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { toLocalDate } from '@/lib/format/date'
 import { prettyDescription } from '@/lib/format/description'
 import { minusDays } from '@/lib/sync/classification'
+import { recentWindowStart } from './totals'
 import { groupNewPlaces, type NewPlaceGroup } from '@/lib/review/places'
 
-const PENDING_DAYS = 30
 /** Mesma janela da reclassificação: regra nova alcança tudo o que aparece aqui. */
 const PLACES_DAYS = 90
 
@@ -38,7 +38,7 @@ export async function loadReview(): Promise<ReviewData> {
       .select(cols)
       .eq('kind', 'pending_review')
       .is('deleted_at', null)
-      .gte('date', minusDays(today, PENDING_DAYS))
+      .gte('date', recentWindowStart(today))
       .order('date', { ascending: false })
       .limit(200),
     db

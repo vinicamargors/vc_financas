@@ -115,7 +115,7 @@ export function StatementView({ initial, today, yesterday }: { initial: Statemen
               <Money cents={day.totalCents} sign />
             </h2>
             <ul className="tx-list">
-              {day.items.map((t) => (
+              {day.items.map((t) => [t, rowDisplay(t)] as const).map(([t, d]) => (
                 <li key={t.id} className="tx">
                   <span className="ic" aria-hidden="true">
                     {initials(t.description)}
@@ -130,10 +130,10 @@ export function StatementView({ initial, today, yesterday }: { initial: Statemen
                     </b>
                     <span>
                       {t.accountLabel ? <BankMark institution={t.accountLabel} logoUrl={t.logoUrl} /> : null}
-                      {[rowDisplay(t).label, t.accountLabel, t.cardLast4 ? `cartão •••• ${t.cardLast4}` : null, t.occurredAt ? formatTime(t.occurredAt) : null].filter(Boolean).join(' · ')}
+                      {[d.label, t.accountLabel, t.cardLast4 ? `cartão •••• ${t.cardLast4}` : null, t.occurredAt ? formatTime(t.occurredAt) : null].filter(Boolean).join(' · ')}
                     </span>
                   </span>
-                  <Money cents={t.amountCents} sign className={`am${rowDisplay(t).neutral ? ' neu' : t.amountCents > 0 ? ' in' : ''}`} />
+                  <Money cents={t.amountCents} sign className={`am${d.neutral ? ' neu' : t.amountCents > 0 ? ' in' : ''}`} />
                 </li>
               ))}
             </ul>
