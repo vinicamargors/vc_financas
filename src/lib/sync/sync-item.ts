@@ -72,6 +72,7 @@ export async function syncItem(deps: SyncDeps, userId: string, itemId: string): 
     status: item.status,
     statusDetail: item.error?.code ?? item.executionStatus ?? null,
     consentExpiresAt: item.consentExpiresAt ? new Date(item.consentExpiresAt).toISOString() : null,
+    bankDataAt: item.lastUpdatedAt ? new Date(item.lastUpdatedAt).toISOString() : (existing?.bankDataAt ?? null),
   }
   const connection = await repo.upsertConnection({
     ...base,

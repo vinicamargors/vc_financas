@@ -15,6 +15,8 @@ export interface ConnectionRow {
   status: string
   statusDetail: string | null
   consentExpiresAt: string | null
+  /** Última busca da Pluggy no banco (item.lastUpdatedAt). */
+  bankDataAt?: string | null
   lastSyncedAt: string | null
   createdAt: string
 }
@@ -117,6 +119,7 @@ interface ConnectionDb {
   status: string
   status_detail: string | null
   consent_expires_at: string | null
+  bank_data_at?: string | null
   last_synced_at: string | null
   created_at: string
 }
@@ -167,6 +170,7 @@ const fromDb = (r: ConnectionDb): ConnectionRow => ({
   status: r.status,
   statusDetail: r.status_detail,
   consentExpiresAt: r.consent_expires_at,
+  bankDataAt: r.bank_data_at ?? null,
   lastSyncedAt: r.last_synced_at,
   createdAt: r.created_at,
 })
@@ -196,6 +200,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
             status: row.status,
             status_detail: row.statusDetail,
             consent_expires_at: row.consentExpiresAt,
+            ...(row.bankDataAt !== undefined ? { bank_data_at: row.bankDataAt } : {}),
             last_synced_at: row.lastSyncedAt,
           },
           { onConflict: 'user_id,pluggy_item_id' },

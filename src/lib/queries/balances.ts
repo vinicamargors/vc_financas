@@ -29,12 +29,13 @@ export type ConnectionRow = {
   status: string
   consentExpiresAt: string | null
   lastSyncedAt: string | null
+  bankDataAt?: string | null
 }
 
 export async function loadHomeData(): Promise<{ connections: ConnectionRow[]; summary: CheckingSummary; logos: Map<string, string> }> {
   const supabase = await createServerSupabase()
   const [conns, accs] = await Promise.all([
-    supabase.from('connections').select('id, connector_name, connector_image_url, status, consent_expires_at, last_synced_at'),
+    supabase.from('connections').select('id, connector_name, connector_image_url, status, consent_expires_at, last_synced_at, bank_data_at'),
     supabase.from('accounts').select('institution, name, logo_url, type, subtype, balance_cents, updated_at'),
   ])
   if (conns.error) throw new Error('Falha ao carregar conexões')
@@ -47,6 +48,7 @@ export async function loadHomeData(): Promise<{ connections: ConnectionRow[]; su
       status: c.status,
       consentExpiresAt: c.consent_expires_at,
       lastSyncedAt: c.last_synced_at,
+      bankDataAt: (c as { bank_data_at?: string | null }).bank_data_at ?? null,
     })),
     summary: summarizeCheckingBalances(
       (accs.data ?? []).map((a) => ({
@@ -81,4 +83,14 @@ function withAccountLogos(
     if (a.logo_url && /^https:\/\//.test(a.logo_url)) m.set(key, a.logo_url)
   }
   return m
+}
+
+/** Data mais antiga em que a Pluggy buscou dados no banco, entre conexões saudáveis. */
+export function oldestBankData(connections: ConnectionRow[]): string | null {
+  let oldest: string | null = null
+  for (const c of connections) {
+    if (!['UPDATED', 'UPDATING'].includes(c.status) || !c.bankDataAt) continue
+    if (oldest === null || new Date(c.bankDataAt) < new Date(oldest)) oldest = c.bankDataAt
+  }
+  return oldest
 }
