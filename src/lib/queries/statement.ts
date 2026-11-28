@@ -3,6 +3,8 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { toLocalDate } from '@/lib/format/date'
 import { logoMap } from './logos'
 import { prettyDescription } from '@/lib/format/description'
+import type { Filter } from '@/app/(app)/extrato/statement-filter'
+import { decodeCursor, encodeCursor, filterPredicate, keysetOr, type StatementCursor } from './statement-page'
 
 export type DayTx = { date: string; amountCents: number; deletedAt: string | null }
 export type DayGroup<T extends DayTx> = { date: string; totalCents: number; items: T[] }
@@ -32,36 +34,67 @@ export type StatementTx = DayTx & {
   installmentTotal: number | null
 }
 
-export async function loadStatement(days = 90): Promise<DayGroup<StatementTx>[]> {
+const COLUMNS =
+  'id, date, occurred_at, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, accounts(institution, name, logo_url)'
+
+export type StatementPage = { groups: DayGroup<StatementTx>[]; nextCursor: string | null }
+
+export async function loadStatementPage({
+  cursor,
+  filter = 'tudo',
+  limit = 50,
+  days = 90,
+}: {
+  cursor?: string | null
+  filter?: Filter
+  limit?: number
+  days?: number
+}): Promise<StatementPage> {
   const supabase = await createServerSupabase()
   const since = toLocalDate(subDays(new Date(), days))
   const today = toLocalDate(new Date())
-  const PAGE = 1000
-  const rows: NonNullable<Awaited<ReturnType<typeof fetchPage>>['data']> = []
-  async function fetchPage(from: number) {
-    return supabase
-      .from('transactions')
-      .select('id, date, occurred_at, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, accounts(institution, name, logo_url)')
-      .is('deleted_at', null)
-      .gte('date', since)
-      // Parcelas futuras do cartão ficam fora do extrato (são compromissos, não lançamentos).
-      .lte('date', today)
+  const after: StatementCursor | null = cursor ? decodeCursor(cursor) : null
+  const pred = filterPredicate(filter)
+
+  // Parcelas futuras do cartão ficam fora do extrato (são compromissos, não lançamentos).
+  function base(from: StatementCursor | null) {
+    let q = supabase.from('transactions').select(COLUMNS).is('deleted_at', null).gte('date', since).lte('date', today)
+    if (pred) q = q.filter(pred.column, pred.op, pred.value === null ? null : pred.value)
+    if (from) q = q.or(keysetOr(from))
+    return q
       .order('date', { ascending: false })
       .order('occurred_at', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false })
       .order('id', { ascending: false })
-      .range(from, from + PAGE - 1)
   }
-  const conns = await supabase.from('connections').select('connector_name, connector_image_url')
+  type Row = NonNullable<Awaited<ReturnType<ReturnType<typeof base>['limit']>>['data']>[number]
+  const cursorOf = (r: Row): StatementCursor => ({ date: r.date, occurredAt: r.occurred_at, id: r.id })
+
+  const [conns, page] = await Promise.all([
+    supabase.from('connections').select('connector_name, connector_image_url'),
+    base(after).limit(limit + 1),
+  ])
   if (conns.error) throw new Error('Falha ao carregar conexões')
+  if (page.error) throw new Error('Falha ao carregar o extrato')
   const logos = logoMap(conns.data ?? [])
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await fetchPage(from)
-    if (error) throw new Error('Falha ao carregar o extrato')
-    rows.push(...(data ?? []))
-    if ((data ?? []).length < PAGE) break
+
+  let rows: Row[] = page.data ?? []
+  let hasMore = rows.length > limit
+  if (hasMore) {
+    const last = rows[limit - 1]
+    // Completa o último dia para que grupos e totais nunca fiquem parciais.
+    if (rows[limit].date === last.date) {
+      const rest = await base(cursorOf(last)).eq('date', last.date)
+      if (rest.error) throw new Error('Falha ao carregar o extrato')
+      rows = [...rows.slice(0, limit), ...(rest.data ?? [])]
+      const probe = await base(null).lt('date', last.date).limit(1)
+      if (probe.error) throw new Error('Falha ao carregar o extrato')
+      hasMore = (probe.data ?? []).length > 0
+    } else {
+      rows = rows.slice(0, limit)
+    }
   }
-  return groupByDay(
+
+  const groups = groupByDay(
     rows.map((t) => {
       const acc = Array.isArray(t.accounts) ? t.accounts[0] : t.accounts
       return {
@@ -79,4 +112,5 @@ export async function loadStatement(days = 90): Promise<DayGroup<StatementTx>[]>
       }
     }),
   )
+  return { groups, nextCursor: hasMore && rows.length ? encodeCursor(cursorOf(rows[rows.length - 1])) : null }
 }
