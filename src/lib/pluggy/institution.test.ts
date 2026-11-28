@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectInstitution } from './institution'
+import { detectInstitution, inheritInstitution } from './institution'
 
 describe('detectInstitution', () => {
   it('conector normal: usa o nome do conector', () => {
@@ -15,5 +15,17 @@ describe('detectInstitution', () => {
   })
   it('Meu Pluggy sem pista: usa o nome do produto', () => {
     expect(detectInstitution({ name: 'Conta Pagamento', bankData: { transferNumber: null } }, 'MeuPluggy')).toBe('Conta Pagamento')
+  })
+})
+
+describe('inheritInstitution', () => {
+  it('cartão sem banco herda o único banco da conexão', () => {
+    expect(inheritInstitution(['Bradesco', 'Bradesco', 'VISA INFINITE'])).toEqual(['Bradesco', 'Bradesco', 'Bradesco'])
+  })
+  it('dois bancos diferentes: não adivinha', () => {
+    expect(inheritInstitution(['Bradesco', 'Nubank', 'VISA INFINITE'])).toEqual(['Bradesco', 'Nubank', 'VISA INFINITE'])
+  })
+  it('detecta "Banco Bradesco" pelo nome da conta', () => {
+    expect(detectInstitution({ name: 'Banco Bradesco' }, 'MeuPluggy')).toBe('Bradesco')
   })
 })

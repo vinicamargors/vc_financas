@@ -1,4 +1,4 @@
-import { detectInstitution, isMeuPluggy } from '@/lib/pluggy/institution'
+import { detectInstitution, inheritInstitution, isMeuPluggy } from '@/lib/pluggy/institution'
 import type { PluggySource } from '@/lib/pluggy/source'
 import { mapAccount, mapTransaction, type AccountRow, type TransactionRow } from '@/lib/pluggy/map'
 import { toLocalDate } from '@/lib/format/date'
@@ -79,8 +79,9 @@ export async function syncItem(deps: SyncDeps, userId: string, itemId: string): 
     return logoCache.get(institution) ?? null
   }
   const accountRows: AccountRow[] = []
-  for (const a of accounts) {
-    const institution = detectInstitution(a, base.connectorName)
+  const institutions = inheritInstitution(accounts.map((a) => detectInstitution(a, base.connectorName)))
+  for (const [i, a] of accounts.entries()) {
+    const institution = institutions[i]
     accountRows.push(mapAccount(a, { userId, connectionId: connection.id, institution, logoUrl: await logoFor(institution) }))
   }
   const rows = await repo.upsertAccounts(accountRows)
