@@ -303,3 +303,24 @@ describe('caixinha do Mercado Pago', () => {
   })
 })
 
+describe('fatura paga por Pix QR', () => {
+  const accs = [{ id: 'brad', type: 'BANK' as const }, { id: 'nucard', type: 'CREDIT' as const }]
+  const base = { date: '2026-11-27', classifiedBy: 'auto' as const, kind: null, linkedTransactionId: null, counterpartyDoc: null, counterpartyName: null, pluggyCategory: null, paymentMethod: null }
+  const ctx = { ownerDocs: [], ownerNames: [], accounts: accs, rules: [], merchantsById: {} }
+  it('texto do Bradesco sozinho já é fatura', () => {
+    const r = classify([{ ...base, id: 'q1', accountId: 'brad', amountCents: -101762, descriptionRaw: 'PIX QR CODE DINAMICO - DES: RECEBTO PAGTO ANTEC G 27/11 - DOCTO: 1' }], ctx)
+    expect(r.decisions.find((d) => d.id === 'q1')?.kind).toBe('card_payment')
+  })
+  it('par com "Pagamento recebido" no cartão vira fatura mesmo sem texto de fatura no banco', () => {
+    const r = classify(
+      [
+        { ...base, id: 'o', accountId: 'brad', amountCents: -50000, descriptionRaw: 'PIX QR CODE DINAMICO - DES: NU PAGAMENTOS 27/11' },
+        { ...base, id: 'i', accountId: 'nucard', amountCents: 50000, descriptionRaw: 'Pagamento recebido' },
+      ],
+      ctx,
+    )
+    expect(r.decisions.find((d) => d.id === 'o')?.kind).toBe('card_payment')
+    expect(r.decisions.find((d) => d.id === 'i')?.kind).toBe('card_payment')
+  })
+})
+
