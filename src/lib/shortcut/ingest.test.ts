@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { hashToken } from './token'
-import { ingestShortcut, RATE_LIMIT_PER_HOUR, type IngestRepo, type ShortcutInsert } from './ingest'
+import { ingestShortcut, pickAccount, RATE_LIMIT_PER_HOUR, type IngestRepo, type ShortcutInsert } from './ingest'
 
 interface Acc { id: string; userId: string; type: 'BANK' | 'CREDIT' | 'MANUAL'; name: string; institution: string }
 
@@ -70,6 +70,18 @@ describe('ingestShortcut', () => {
     // sem dica e com dois cartões: conta manual
     await ingestShortcut(m.repo, req({ amount: 9, merchant: 'X' }), now)
     expect(m.inserted[1].accountId).toBe('man-A')
+  })
+
+  it('casa por palavra em comum nos dois sentidos e ignora dica curta', () => {
+    const accs = [
+      { id: 'c1', name: 'Mastercard Black', institution: 'Nubank' },
+      { id: 'c2', name: 'Visa Infinite', institution: 'Itaú Unibanco' },
+    ]
+    expect(pickAccount(accs, 'Itaú Visa Infinite')).toBe('c2')
+    expect(pickAccount(accs, 'NUBANK')).toBe('c1')
+    expect(pickAccount(accs, 'Cartão Nubank Ultravioleta')).toBe('c1')
+    expect(pickAccount(accs, 'it')).toBeNull()
+    expect(pickAccount(accs, 'Inter')).toBeNull()
   })
 
   it('usa o único cartão quando não há dica', async () => {

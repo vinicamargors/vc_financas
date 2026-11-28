@@ -1,10 +1,8 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createSupabaseSyncRepo } from '@/lib/sync/repo'
+import { createSupabaseSyncRepo, SHORTCUT_ACCOUNT_EXTERNAL_ID } from '@/lib/sync/repo'
 import { classifyWindow } from '@/lib/sync/classification'
 import type { IngestRepo } from './ingest'
-
-const MANUAL_EXTERNAL_ID = 'atalho'
 
 /** Service role: toda consulta filtra pelo `userId` do dono do token. */
 export function createSupabaseIngestRepo(admin: SupabaseClient): IngestRepo {
@@ -31,7 +29,7 @@ export function createSupabaseIngestRepo(admin: SupabaseClient): IngestRepo {
     },
     async ensureManualAccount(userId) {
       const find = () =>
-        admin.from('accounts').select('id').eq('user_id', userId).eq('external_id', MANUAL_EXTERNAL_ID).maybeSingle()
+        admin.from('accounts').select('id').eq('user_id', userId).eq('external_id', SHORTCUT_ACCOUNT_EXTERNAL_ID).maybeSingle()
       const found = await find()
       if (found.error) throw found.error
       if (found.data) return found.data.id as string
@@ -39,7 +37,7 @@ export function createSupabaseIngestRepo(admin: SupabaseClient): IngestRepo {
       const { error } = await admin
         .from('accounts')
         .upsert(
-          { user_id: userId, connection_id: null, external_id: MANUAL_EXTERNAL_ID, type: 'MANUAL', name: 'Atalho', institution: 'Atalho' },
+          { user_id: userId, connection_id: null, external_id: SHORTCUT_ACCOUNT_EXTERNAL_ID, type: 'MANUAL', name: 'Atalho', institution: 'Atalho' },
           { onConflict: 'user_id,external_id', ignoreDuplicates: true },
         )
       if (error) throw error

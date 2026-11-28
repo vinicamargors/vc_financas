@@ -2,7 +2,8 @@ import type { Kind, Rule } from '@/lib/classify/classify'
 import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
 import type { ClassificationChanges, ConnectionRow, SyncRepo } from './repo'
 
-const dayDiff = (a: string, b: string) => Math.abs(Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000
+import { dayDistance } from './classification'
+import { classifierAccountType } from './repo'
 
 export type StoredAccount = AccountRow & { id: string }
 export type StoredTransaction = Omit<TransactionRow, 'kind'> & {
@@ -13,6 +14,7 @@ export type StoredTransaction = Omit<TransactionRow, 'kind'> & {
   categoryId: string | null
   merchantId: string | null
   linkedTransactionId: string | null
+  createdAt: string
 }
 export interface MemoryProfile {
   cpf: string | null
@@ -110,6 +112,7 @@ export function createMemoryRepo(): SyncRepo & {
           categoryId: prev?.categoryId ?? null,
           merchantId: prev?.merchantId ?? null,
           linkedTransactionId: prev?.linkedTransactionId ?? null,
+          createdAt: prev?.createdAt ?? new Date().toISOString(),
         })
       }
       return keys.size
@@ -165,7 +168,7 @@ export function createMemoryRepo(): SyncRepo & {
           categoryId: t.categoryId,
           merchantId: t.merchantId,
         })),
-        accounts: [...accounts.values()].filter((a) => a.userId === userId).map((a) => ({ id: a.id, type: ((a.type as string) === 'MANUAL' ? 'CREDIT' : a.type) as 'BANK' | 'CREDIT' })),
+        accounts: [...accounts.values()].filter((a) => a.userId === userId).map((a) => ({ id: a.id, type: classifierAccountType(a.type, a.externalId) })),
         rules: rules.filter((r) => r.userId === userId).map((r) => ({ matchField: r.matchField, pattern: r.pattern, merchantId: r.merchantId, categoryId: r.categoryId, kind: r.kind })),
         merchants: merchants.filter((m) => m.userId === userId).map((m) => ({ id: m.id, categoryId: m.categoryId })),
         categories: categories.filter((c) => c.userId === userId).map((c) => ({ id: c.id, name: c.name })),
@@ -198,28 +201,30 @@ export function createMemoryRepo(): SyncRepo & {
       const shortcuts = live.filter((t) => (t.source as string) === 'shortcut' && !t.linkedTransactionId && t.date >= from && t.date <= to)
       const credit = new Set([...accounts.values()].filter((a) => a.userId === userId && a.type === 'CREDIT').map((a) => a.id))
       const candidates = live.filter(
-        (t) => t.source === 'pluggy' && credit.has(t.accountId) && shortcuts.some((s) => s.amountCents === t.amountCents && dayDiff(s.date, t.date) <= 1),
+        (t) => t.source === 'pluggy' && credit.has(t.accountId) && shortcuts.some((s) => s.amountCents === t.amountCents && dayDistance(s.date, t.date) <= 1),
       )
       const taken = [...transactions.values()]
         .filter((t) => t.userId === userId && (t.source as string) === 'shortcut' && t.linkedTransactionId)
         .map((t) => t.linkedTransactionId as string)
       return {
         shortcuts: shortcuts.map((t) => ({
-          id: t.id, date: t.date, amountCents: t.amountCents, merchantId: t.merchantId, categoryId: t.categoryId, kind: t.kind ?? null, classifiedBy: t.classifiedBy,
+          id: t.id, accountId: t.accountId, date: t.date, amountCents: t.amountCents, createdAt: t.createdAt, merchantId: t.merchantId, categoryId: t.categoryId, kind: t.kind ?? null, classifiedBy: t.classifiedBy,
         })),
-        candidates: candidates.map((t) => ({ id: t.id, date: t.date, amountCents: t.amountCents })),
+        candidates: candidates.map((t) => ({ id: t.id, accountId: t.accountId, date: t.date, amountCents: t.amountCents, createdAt: t.createdAt })),
         taken,
       }
     },
     async applyShortcutMerges(userId, matches) {
       for (const { shortcut: s, pluggyId } of matches) {
+        const sc = txById(s.id)
+        if (!sc || sc.userId !== userId || (sc.source as string) !== 'shortcut' || sc.deletedAt || sc.linkedTransactionId) continue
+        Object.assign(sc, { deletedAt: new Date().toISOString(), linkedTransactionId: pluggyId })
+        if (s.merchantId === null && s.categoryId === null) continue
         const p = txById(pluggyId)
         if (p && p.userId === userId && p.classifiedBy === 'auto') {
           Object.assign(p, { merchantId: s.merchantId, categoryId: s.categoryId })
           if (s.classifiedBy === 'user') Object.assign(p, { kind: s.kind, classifiedBy: 'user' })
         }
-        const sc = txById(s.id)
-        if (sc && sc.userId === userId && (sc.source as string) === 'shortcut') Object.assign(sc, { deletedAt: new Date().toISOString(), linkedTransactionId: pluggyId })
       }
     },
     insertShortcut(r) {
@@ -232,6 +237,7 @@ export function createMemoryRepo(): SyncRepo & {
         occurredAt: null, pluggyCategory: null, counterpartyName: null, counterpartyDoc: null, paymentMethod: null,
         installmentNumber: null, installmentTotal: null, cardLast4: null, status: null, raw: null as unknown as StoredTransaction['raw'],
         deletedAt: null, kind: null, classifiedBy: 'auto', categoryId: null, merchantId: null, linkedTransactionId: null,
+        createdAt: new Date().toISOString(),
       })
       return id
     },

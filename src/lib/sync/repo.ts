@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ClassifyTx, Kind, Rule } from '@/lib/classify/classify'
 import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
+import { minusDays } from './classification'
 import type { MergeCandidate, ShortcutMatch, ShortcutRow } from '@/lib/shortcut/merge'
 
 /** Espelha as colunas de `connections` (camelCase). */
@@ -84,9 +85,17 @@ export interface SyncRepo {
 
 const CHUNK = 500
 
-const DAY_MS = 86_400_000
-const minusDays = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) - n * DAY_MS).toISOString().slice(0, 10)
-const plusDays = (d: string, n: number) => minusDays(d, -n)
+/** `external_id` da conta MANUAL criada pelo Atalho do iPhone. */
+export const SHORTCUT_ACCOUNT_EXTERNAL_ID = 'atalho'
+
+/**
+ * A conta do Atalho só recebe compras de cartão: o classificador a vê como CREDIT (assim uma
+ * compra nunca vira par de transferência). Outras contas seguem como estão.
+ */
+export function classifierAccountType(type: string, externalId: string | null): 'BANK' | 'CREDIT' {
+  return (type === 'MANUAL' && externalId === SHORTCUT_ACCOUNT_EXTERNAL_ID ? 'CREDIT' : type) as 'BANK' | 'CREDIT'
+}
+
 
 /** Listas de uuid vão na URL (`in.(...)`): lotes menores. */
 const ID_CHUNK = 100
@@ -342,7 +351,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
 
     async loadClassificationData(userId, from, to) {
       const [accounts, rules, merchants, categories, profile] = await Promise.all([
-        admin.from('accounts').select('id, type').eq('user_id', userId),
+        admin.from('accounts').select('id, type, external_id').eq('user_id', userId),
         admin.from('rules').select('match_field, pattern, merchant_id, category_id, kind').eq('user_id', userId).order('created_at'),
         admin.from('merchants').select('id, category_id').eq('user_id', userId),
         admin.from('categories').select('id, name').eq('user_id', userId),
@@ -373,8 +382,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
       }
       return {
         transactions: rows,
-        // Conta MANUAL (Atalho) só recebe compras de cartão: tratada como CREDIT (nunca vira transferência).
-        accounts: (accounts.data ?? []).map((a) => ({ id: a.id as string, type: (a.type === 'MANUAL' ? 'CREDIT' : a.type) as 'BANK' | 'CREDIT' })),
+        accounts: (accounts.data ?? []).map((a) => ({ id: a.id as string, type: classifierAccountType(a.type as string, a.external_id as string) })),
         rules: (rules.data ?? []).map((r) => ({
           matchField: r.match_field as Rule['matchField'],
           pattern: r.pattern as string,
@@ -433,11 +441,11 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
     },
     async loadShortcutMerge(userId, from, to) {
       const lo = minusDays(from, 1)
-      const hi = plusDays(to, 1)
+      const hi = minusDays(to, -1)
       const [shortcuts, credit] = await Promise.all([
         admin
           .from('transactions')
-          .select('id, date, amount_cents, merchant_id, category_id, kind, classified_by')
+          .select('id, account_id, date, amount_cents, created_at, merchant_id, category_id, kind, classified_by')
           .eq('user_id', userId)
           .eq('source', 'shortcut')
           .is('deleted_at', null)
@@ -456,7 +464,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
         const amounts = [...new Set(scRows.map((s) => Number(s.amount_cents)))]
         const { data, error } = await admin
           .from('transactions')
-          .select('id, date, amount_cents')
+          .select('id, account_id, date, amount_cents, created_at')
           .eq('user_id', userId)
           .eq('source', 'pluggy')
           .is('deleted_at', null)
@@ -467,7 +475,13 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
           .order('date')
           .limit(PAGE)
         if (error) throw error
-        candidates = (data ?? []).map((c) => ({ id: c.id as string, date: c.date as string, amountCents: Number(c.amount_cents) }))
+        candidates = (data ?? []).map((c) => ({
+          id: c.id as string,
+          accountId: c.account_id as string,
+          date: c.date as string,
+          amountCents: Number(c.amount_cents),
+          createdAt: c.created_at as string,
+        }))
         for (const part of chunks(candidates.map((c) => c.id), ID_CHUNK)) {
           const { data: merged, error: mErr } = await admin
             .from('transactions')
@@ -482,8 +496,10 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
       return {
         shortcuts: scRows.map((s) => ({
           id: s.id as string,
+          accountId: s.account_id as string,
           date: s.date as string,
           amountCents: Number(s.amount_cents),
+          createdAt: s.created_at as string,
           merchantId: (s.merchant_id as string | null) ?? null,
           categoryId: (s.category_id as string | null) ?? null,
           kind: (s.kind as Kind | null) ?? null,
@@ -496,6 +512,19 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
 
     async applyShortcutMerges(userId, matches) {
       for (const { shortcut: s, pluggyId } of matches) {
+        // Primeiro apaga o atalho, só se ainda estiver vivo e sem par: uma rodada concorrente não funde duas vezes.
+        const { data: gone, error: delErr } = await admin
+          .from('transactions')
+          .update({ deleted_at: new Date().toISOString(), linked_transaction_id: pluggyId })
+          .eq('user_id', userId)
+          .eq('id', s.id)
+          .eq('source', 'shortcut')
+          .is('deleted_at', null)
+          .is('linked_transaction_id', null)
+          .select('id')
+        if (delErr) throw delErr
+        if ((gone ?? []).length !== 1) continue
+        if (s.merchantId === null && s.categoryId === null) continue
         const patch =
           s.classifiedBy === 'user'
             ? { merchant_id: s.merchantId, category_id: s.categoryId, kind: s.kind, classified_by: 'user' }
@@ -507,13 +536,6 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
           .eq('id', pluggyId)
           .eq('classified_by', 'auto')
         if (error) throw error
-        const { error: delErr } = await admin
-          .from('transactions')
-          .update({ deleted_at: new Date().toISOString(), linked_transaction_id: pluggyId })
-          .eq('user_id', userId)
-          .eq('id', s.id)
-          .eq('source', 'shortcut')
-        if (delErr) throw delErr
       }
     },
   }

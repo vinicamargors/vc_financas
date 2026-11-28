@@ -137,3 +137,12 @@ describe('safeErrorMessage', () => {
     expect(safeErrorMessage({ message: 'x', details: '12345678909', hint: '12345678909' })).toBe('x')
   })
 })
+
+describe('classifierAccountType', () => {
+  it('só a conta MANUAL do Atalho vira CREDIT', async () => {
+    const { classifierAccountType } = await import('./repo')
+    expect(classifierAccountType('MANUAL', 'atalho')).toBe('CREDIT')
+    expect(classifierAccountType('MANUAL', 'outra')).toBe('MANUAL')
+    expect(classifierAccountType('BANK', 'atalho')).toBe('BANK')
+  })
+})

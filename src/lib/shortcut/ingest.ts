@@ -35,13 +35,27 @@ export interface IngestResponse {
 
 const fail = (status: number, error: string): IngestResponse => ({ status, body: { error } })
 
+const MIN_WORD = 3
+
+const words = (text: string) =>
+  new Set(
+    text
+      .toLocaleLowerCase('pt-BR')
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((w) => w.length >= MIN_WORD),
+  )
+
+/**
+ * Cartão cujo nome/instituição tem alguma palavra (≥ 3 letras) em comum com a dica; senão o único
+ * cartão; senão `null` (conta manual).
+ */
 export function pickAccount(
   accounts: { id: string; name: string; institution: string }[],
   card: string | null,
 ): string | null {
-  const hint = card?.toLocaleLowerCase('pt-BR')
-  if (hint) {
-    const hit = accounts.find((a) => `${a.name} ${a.institution}`.toLocaleLowerCase('pt-BR').includes(hint))
+  const hint = words(card ?? '')
+  if (hint.size) {
+    const hit = accounts.find((a) => [...words(`${a.name} ${a.institution}`)].some((w) => hint.has(w)))
     if (hit) return hit.id
   }
   return accounts.length === 1 ? accounts[0].id : null

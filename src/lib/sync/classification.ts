@@ -10,6 +10,11 @@ export function minusDays(date: string, days: number): string {
   return new Date(Date.parse(`${date}T12:00:00Z`) - days * DAY_MS).toISOString().slice(0, 10)
 }
 
+/** Distância em dias entre duas datas `YYYY-MM-DD`. */
+export function dayDistance(a: string, b: string): number {
+  return Math.abs(Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / DAY_MS
+}
+
 export interface ClassifyWindow {
   from: string
   to: string

@@ -192,6 +192,26 @@ describe('fusão com o Atalho', () => {
     expect(repo.dump().transactions.find((t) => t.id === s3)?.deletedAt).toBeNull()
   })
 
+  it('compra antiga de mesmo valor, já sincronizada antes do Atalho, não é fundida', async () => {
+    const repo = createMemoryRepo()
+    const { source } = fakeSource({ accounts: [card], txs: [buy('p-old', 9, '2026-11-27')] })
+    await syncItem({ source, repo, today, now }, U, ITEM)
+    const s1 = repo.insertShortcut({ userId: U, accountId: 'man', date: '2026-11-27', amountCents: -900, descriptionRaw: 'Padaria' })
+    repo.patch(s1, { createdAt: new Date(Date.now() + 3_600_000).toISOString() })
+    await syncItem({ source, repo, today, now }, U, ITEM)
+    expect(repo.dump().transactions.find((t) => t.id === s1)?.deletedAt).toBeNull()
+  })
+
+  it('atalho sem merchant e categoria some sem mexer na linha da Pluggy', async () => {
+    const repo = createMemoryRepo()
+    const s1 = repo.insertShortcut({ userId: U, accountId: 'man', date: '2026-11-27', amountCents: -900, descriptionRaw: 'Padaria' })
+    const { source } = fakeSource({ accounts: [card], txs: [buy('p1', 9, '2026-11-27')] })
+    await syncItem({ source, repo, today, now }, U, ITEM)
+    const d = repo.dump().transactions
+    expect(d.find((t) => t.id === s1)?.deletedAt).not.toBeNull()
+    expect(d.find((t) => t.externalId === 'p1')).toMatchObject({ classifiedBy: 'auto', merchantId: null })
+  })
+
   it('não casa com conta corrente nem com 2 dias de diferença', async () => {
     const repo = createMemoryRepo()
     const s1 = repo.insertShortcut({ userId: U, accountId: 'man', date: '2026-11-24', amountCents: -900, descriptionRaw: 'Padaria' })
