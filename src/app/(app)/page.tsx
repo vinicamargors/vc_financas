@@ -4,7 +4,7 @@ import { BankMark } from '@/components/bank-mark'
 import { Icon, type IconName } from '@/components/icons'
 import { ConnectionStatus } from '@/components/connection-status'
 import { formatDayLabel, formatTime, toLocalDate } from '@/lib/format/date'
-import { loadHomeData, oldestHealthySync } from '@/lib/queries/balances'
+import { loadHomeData, oldestBankData, oldestHealthySync } from '@/lib/queries/balances'
 import { loadSavings, summarizeSavings } from '@/lib/queries/savings'
 import { getCdiAnnual } from '@/lib/cdi'
 import { loadRealSpending } from '@/lib/queries/spending'
@@ -23,7 +23,7 @@ const ACTIONS: { label: string; icon: IconName; href: string }[] = [
 function updatedLabel(iso: string): string {
   const day = toLocalDate(iso)
   const when = day === toLocalDate(new Date()) ? 'hoje' : formatDayLabel(day)
-  return `Atualizado ${when}, ${formatTime(iso)}`
+  return `Dados do banco de ${when}, ${formatTime(iso)}`
 }
 
 function QuickActions({ reviewCount }: { reviewCount: number }) {
@@ -122,7 +122,7 @@ export default async function InicioPage() {
     )
   }
 
-  const syncedAt = oldestHealthySync(connections)
+  const syncedAt = oldestBankData(connections) ?? oldestHealthySync(connections)
   const toReview = review ? reviewCount(review) : 0
 
   return (
