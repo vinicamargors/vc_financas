@@ -1,7 +1,9 @@
 'use server'
 
 import { randomBytes } from 'node:crypto'
+import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { createConnectionDeleter, removeConnection } from '@/lib/connections/remove'
 import { seal } from '@/lib/crypto/secret-box'
 import {
   addItem,
@@ -142,4 +144,18 @@ export async function syncNowAction(): Promise<void> {
     console.error(`reclassificar falhou: ${safeErrorMessage(e)}`)
   }
   redirect(`${PAGE}?sync=${failed === 0 ? 'ok' : 'erro'}`)
+}
+
+export type RemoveConnectionResult = { ok: true } | { ok: false; message: string }
+
+/** Remove a conexão do usuário logado; o cascade leva contas, lançamentos, snapshots e caixinhas. */
+export async function removeConnectionAction(connectionId: string): Promise<RemoveConnectionResult> {
+  const user = await requireUser()
+  const result = await removeConnection(
+    { deleteOwned: createConnectionDeleter(createAdminSupabase()) },
+    user.id,
+    String(connectionId),
+  )
+  if (result.ok) for (const p of ['/', '/extrato', PAGE, '/caixinhas', '/revisar']) revalidatePath(p)
+  return result
 }

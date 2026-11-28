@@ -1192,3 +1192,58 @@ a.btn {
   opacity: 0.55;
   cursor: default;
 }
+
+/* Lista de conexões na tela Bancos. */
+.conn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.conn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.conn-row strong {
+  display: block;
+  font-weight: 600;
+}
+.conn-row small {
+  color: var(--muted);
+}
+.conn-remove {
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.conn-remove.danger {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+  font-weight: 600;
+}
+.conn-remove:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.conn-confirm {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.conn-confirm p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
