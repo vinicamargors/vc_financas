@@ -71,7 +71,7 @@ describe('classify', () => {
   })
 
   it('par de R$ 2.000 entre Bradesco e Nubank → transfer ligado', () => {
-    const out = tx({ accountId: 'brad', amountCents: -200000, date: '2026-11-27', descriptionRaw: 'TED ENVIADA - DES: X' })
+    const out = tx({ accountId: 'brad', amountCents: -200000, date: '2026-11-27', descriptionRaw: 'TED ENVIADA - DES: X', counterpartyDoc: OWNER_CPF })
     const inn = tx({ accountId: 'nu', amountCents: 200000, date: '2026-11-28', descriptionRaw: 'Transferência recebida' })
     const r = classify([out, inn], ctx)
     expect(r.decisions.map((d) => d.kind)).toEqual(['transfer', 'transfer'])
@@ -105,6 +105,40 @@ describe('classify', () => {
     const r = classify([cardOut, bankIn, bankOut, cardIn], ctx)
     expect(r.links).toEqual([])
     expect(r.decisions.find((d) => d.id === cardIn.id)?.kind).toBe('refund')
+  })
+
+  it('par sem sinal de dinheiro próprio → pending_review: Pix soltos, salário vs aluguel', () => {
+    const o = tx({ accountId: 'brad', amountCents: -80000, descriptionRaw: 'PIX ENVIADO - DES: Fulano', counterpartyDoc: '98765432100' })
+    const i = tx({ accountId: 'nu', amountCents: 80000, descriptionRaw: 'Transferência recebida pelo Pix - Beltrano', counterpartyDoc: '11122233344' })
+    expect(classify([o, i], ctx).decisions.map((d) => d.kind)).toEqual(['pending_review', 'pending_review'])
+    const rent = tx({ accountId: 'nu', amountCents: -450000, descriptionRaw: 'Transferência enviada pelo Pix - Locador' })
+    const salary = tx({ accountId: 'brad', amountCents: 450000, descriptionRaw: 'PIX RECEBIDO - REM: ACME LTDA', counterpartyDoc: '12345678000199' })
+    const r = classify([rent, salary], ctx)
+    expect(r.decisions.map((d) => d.kind)).toEqual(['pending_review', 'pending_review'])
+    expect(r.links).toHaveLength(2)
+  })
+
+  it('Pluggy mesma titularidade num lado basta para o par virar transfer', () => {
+    const o = tx({ accountId: 'brad', amountCents: -70000, descriptionRaw: 'TRANSFERENCIA PIX', pluggyCategory: 'Same person transfer - PIX' })
+    const i = tx({ accountId: 'nu', amountCents: 70000, descriptionRaw: 'Pix recebido' })
+    const r = classify([o, i], ctx)
+    expect(r.decisions.map((d) => d.kind)).toEqual(['transfer', 'transfer'])
+    expect(r.links).toHaveLength(2)
+  })
+
+  it('ligação exige mão dupla e aceita parceiro pending_review; relink sai de unlinked', () => {
+    const a = tx({ id: 'pa', accountId: 'brad', amountCents: -5000, linkedTransactionId: 'pb', kind: 'pending_review' })
+    const b = tx({ id: 'pb', accountId: 'nu', amountCents: 5000, linkedTransactionId: 'pa', kind: 'pending_review' })
+    const r1 = classify([a, b], ctx)
+    expect(r1.decisions.map((d) => d.kind)).toEqual(['pending_review', 'pending_review'])
+    expect(r1.unlinked).toEqual([])
+    // Só um lado aponta: ligação velha; as duas voltam ao pareamento e se religam.
+    const c = tx({ id: 'pc', accountId: 'brad', amountCents: -5000, linkedTransactionId: 'pd', kind: 'transfer' })
+    const d = tx({ id: 'pd', accountId: 'nu', amountCents: 5000, linkedTransactionId: null, kind: 'transfer' })
+    const r2 = classify([c, d], ctx)
+    expect(r2.links.map((l) => l.id).sort()).toEqual(['pc', 'pd'])
+    expect(r2.unlinked).toEqual([])
+    for (const id of r2.unlinked) expect(r2.links.some((l) => l.id === id)).toBe(false)
   })
 
   it('par sem nenhum sinal de transferência → pending_review nos dois', () => {

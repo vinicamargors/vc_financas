@@ -79,8 +79,6 @@ const PIX_TED = /\b(pix|ted)\b/i
 /** Descrições de envio a uma pessoa (Bradesco, Nubank, Mercado Pago). Texto já normalizado. */
 const PERSON_TRANSFER =
   /^(pix enviado|ted enviad[ao])|transferencia (enviada|pix)|pix .*enviad|transf(\.|erencia)? (cc|p\/)|ted dif/
-/** Algum sinal de movimentação entre contas na descrição. */
-const TRANSFER_SIGNAL = /transf|\bpix\b|\bted\b|\bdoc\b|aplica|resgate|pagamento|pagto|fatura|caixinha|cofrinho|guardad/
 const REVIEW_THRESHOLD_CENTS = 100_000
 const DAY_MS = 86_400_000
 
@@ -179,7 +177,13 @@ function pairTransfers(
   return pairs
 }
 
-/** Classifica lançamentos automaticamente. Linhas marcadas pelo usuário são ignoradas por completo. */
+/**
+ * Classifica lançamentos automaticamente. Linhas marcadas pelo usuário são ignoradas por completo.
+ *
+ * Contrato com quem chama:
+ * - a entrada deve incluir os parceiros das linhas já ligadas (senão a ligação é tida como velha);
+ * - aplicar `unlinked` (zerar `linked_transaction_id`) antes de gravar `links`.
+ */
 export function classify(txs: ClassifyTx[], ctx: ClassifyContext): ClassifyResult {
   const accountType = new Map(ctx.accounts.map((a) => [a.id, a.type]))
   const ownerDocs = new Set(ctx.ownerDocs.map(onlyDigits).filter(Boolean))
@@ -193,8 +197,14 @@ export function classify(txs: ClassifyTx[], ctx: ClassifyContext): ClassifyResul
 
   const linkHolds = (t: ClassifyTx): boolean => {
     const p = t.linkedTransactionId ? byId.get(t.linkedTransactionId) : undefined
-    return !!p && p.classifiedBy === 'auto' && (p.kind === 'transfer' || p.kind === 'card_payment')
+    return (
+      !!p &&
+      p.classifiedBy === 'auto' &&
+      p.linkedTransactionId === t.id &&
+      (p.kind === 'transfer' || p.kind === 'card_payment' || p.kind === 'pending_review')
+    )
   }
+  const ownMoney = new Set<string>()
 
   // 1–2. Regras do usuário, rendimento, ligação válida, transferência para si.
   for (const t of auto) {
@@ -209,21 +219,24 @@ export function classify(txs: ClassifyTx[], ctx: ClassifyContext): ClassifyResul
     if (t.linkedTransactionId && !linkHolds(t)) unlinked.push(t.id)
     if (t.kind === 'savings_yield') decided.set(t.id, { id: t.id, kind: 'savings_yield' })
     else if (t.linkedTransactionId && linkHolds(t))
-      decided.set(t.id, { id: t.id, kind: t.kind === 'card_payment' ? 'card_payment' : 'transfer' })
-    else if (isToSelf(t, ownerDocs, ownerNames) || isPluggySamePersonTransfer(t.pluggyCategory))
-      decided.set(t.id, { id: t.id, kind: 'transfer' })
+      decided.set(t.id, { id: t.id, kind: t.kind === 'card_payment' || t.kind === 'pending_review' ? t.kind : 'transfer' })
+    else if (isToSelf(t, ownerDocs, ownerNames) || isPluggySamePersonTransfer(t.pluggyCategory)) ownMoney.add(t.id)
   }
 
   // 3. Par casado entre contas do usuário.
   const candidates = auto.filter((t) => !decided.has(t.id) && t.amountCents !== 0)
   for (const [o, i] of pairTransfers(candidates, accountType)) {
     const card = isCardPayment(o, accountType.get(o.accountId)) && isCardPayment(i, accountType.get(i.accountId))
-    const signal = TRANSFER_SIGNAL.test(normalizeText(o.descriptionRaw)) || TRANSFER_SIGNAL.test(normalizeText(i.descriptionRaw))
-    const kind: Kind = card ? 'card_payment' : signal ? 'transfer' : 'pending_review'
+    // Só vira transferência com sinal forte de dinheiro próprio; valor igual sozinho é coincidência possível.
+    const own = ownMoney.has(o.id) || ownMoney.has(i.id)
+    const kind: Kind = card ? 'card_payment' : own ? 'transfer' : 'pending_review'
     decided.set(o.id, { id: o.id, kind })
     decided.set(i.id, { id: i.id, kind })
     links.push({ id: o.id, linkedId: i.id }, { id: i.id, linkedId: o.id })
   }
+
+  // 2 (sem par). Dinheiro próprio que não achou o outro lado continua transferência.
+  for (const id of ownMoney) if (!decided.has(id)) decided.set(id, { id, kind: 'transfer' })
 
   // 4–8. Regras fixas para o resto.
   for (const t of auto) {
@@ -257,5 +270,6 @@ export function classify(txs: ClassifyTx[], ctx: ClassifyContext): ClassifyResul
       return merged
     })
     .filter((d): d is Decision => d !== undefined)
-  return { decisions, links, unlinked }
+  const relinked = new Set(links.map((l) => l.id))
+  return { decisions, links, unlinked: unlinked.filter((id) => !relinked.has(id)) }
 }
