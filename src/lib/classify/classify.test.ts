@@ -353,6 +353,13 @@ describe('fontes de renda', () => {
     expect(one(tx({ amountCents: 5000, counterpartyDoc: '99.999.999/0001-99' }), withSources)).toEqual(expect.not.objectContaining({ incomeSourceId: expect.anything() }))
   })
 
+  it('Pix próprio com descrição que contém o nome da fonte continua transferência; entrada no cartão fica sem fonte', () => {
+    const own = tx({ amountCents: 500_000, descriptionRaw: 'PIX RECEBIDO BETA SERVICOS', counterpartyDoc: OWNER_CPF })
+    expect(one(own, withSources)).toMatchObject({ kind: 'transfer' })
+    expect(one(own, withSources)?.incomeSourceId).toBeUndefined()
+    expect(one(tx({ accountId: 'nucard', amountCents: 500_000, counterpartyDoc: EMPRESA }), withSources)?.incomeSourceId).toBeUndefined()
+  })
+
   it('salário não vira par de transferência com saída de mesmo valor', () => {
     const salario = tx({ accountId: 'brad', amountCents: 850_000, counterpartyDoc: EMPRESA })
     const saida = tx({ accountId: 'nu', amountCents: -850_000, descriptionRaw: 'PAGAMENTO BOLETO' })

@@ -16,9 +16,9 @@ const ERRORS: Record<string, string> = {
 }
 
 export default async function SalarioPage({ searchParams }: { searchParams: Promise<{ erro?: string; salvo?: string }> }) {
-  await requireUser()
+  const user = await requireUser()
   const { erro, salvo } = await searchParams
-  const { sources, payers } = await loadSalarySetup()
+  const { sources, payers } = await loadSalarySetup(user.id)
 
   return (
     <main className="flow">
@@ -74,7 +74,7 @@ export default async function SalarioPage({ searchParams }: { searchParams: Prom
                 </div>
                 <form action={addSalarySourceAction} className="salary-form">
                   {p.payerDoc && <input type="hidden" name="payerDoc" value={p.payerDoc} />}
-                  <input type="hidden" name="payerName" value={p.payerName} />
+                  {p.payerName && <input type="hidden" name="payerName" value={p.payerName} />}
                   <RuleFields />
                   <button type="submit" className="btn">
                     É meu salário

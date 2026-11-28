@@ -36,7 +36,7 @@ describe('computeFree', () => {
     expect(r.freeCents).toBe(775_000)
   })
 
-  it('category_budget reserva o valor e o excesso sai do livre; só gasto no banco', () => {
+  it('category_budget reserva o valor e o excesso do banco sai do livre; cartão só aparece no pago', () => {
     const mercado = c({ name: 'Mercado', kind: 'category_budget', amountCents: 100_000, categoryId: 'cat-m' })
     const r1 = computeFree({ ...base, commitments: [mercado], txs: [tx({ amountCents: -30_000, categoryId: 'cat-m' })] })
     expect(r1.commitments[0]).toMatchObject({ expectedCents: 100_000, paidCents: 30_000, status: 'partial' })
@@ -45,8 +45,11 @@ describe('computeFree', () => {
       ...base, commitments: [mercado],
       txs: [tx({ amountCents: -130_000, categoryId: 'cat-m' }), tx({ amountCents: -40_000, categoryId: 'cat-m', accountType: 'CREDIT' })],
     })
-    expect(r2.commitments[0]).toMatchObject({ paidCents: 130_000, status: 'done' })
+    expect(r2.commitments[0]).toMatchObject({ paidCents: 170_000, status: 'done' })
     expect(r2.freeCents).toBe(870_000)
+    const r3 = computeFree({ ...base, commitments: [mercado], txs: [tx({ amountCents: -150_000, categoryId: 'cat-m', accountType: 'CREDIT' })] })
+    expect(r3.commitments[0]).toMatchObject({ paidCents: 150_000, status: 'done' })
+    expect(r3.freeCents).toBe(900_000)
   })
 
   it('percent_of_income: do salário ou de toda a renda', () => {
@@ -85,6 +88,11 @@ describe('computeFree', () => {
   it('saídas no caixa fora de compromissos: expense no banco e pending_review de saída', () => {
     const txs = [tx({ amountCents: -12_000 }), tx({ amountCents: -100_000, kind: 'pending_review' }), tx({ amountCents: 40_000, kind: 'pending_review' })]
     expect(computeFree({ ...base, txs }).freeCents).toBe(888_000)
+  })
+
+  it('pending_review com texto de fatura não conta como saída fora (já entra pela fatura)', () => {
+    const txs = [tx({ amountCents: -300_000, kind: 'pending_review', descriptionRaw: 'PAGAMENTO FATURA CARTAO' })]
+    expect(computeFree({ ...base, txs, cardEstimateCents: 300_000 }).freeCents).toBe(700_000)
   })
 
   it('livre negativo: por dia é 0, sem dividir', () => {

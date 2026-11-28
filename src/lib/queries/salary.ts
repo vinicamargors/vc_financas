@@ -21,7 +21,8 @@ export type PayerGroup = {
   key: string
   label: string
   payerDoc: string | null
-  payerName: string
+  /** Só o nome real da contraparte; nunca derivado da descrição. */
+  payerName: string | null
   count: number
   lastDate: string
   lastAmountCents: number
@@ -37,7 +38,8 @@ export type IncomeSourceRow = {
 }
 
 /**
- * Agrupa entradas por pagador: documento (só dígitos), senão nome, senão descrição legível.
+ * Agrupa entradas por pagador: documento (só dígitos), senão nome da contraparte. Sem nenhum dos dois
+ * não há como reconhecer o pagador com segurança, e a entrada fica de fora.
  * Esconde grupos que já são fonte salva. Mais recente primeiro.
  */
 export function groupPayers(rows: IncomeCandidate[], saved: { payerDoc: string | null; payerName: string | null }[]): PayerGroup[] {
@@ -47,13 +49,13 @@ export function groupPayers(rows: IncomeCandidate[], saved: { payerDoc: string |
   for (const r of [...rows].sort((a, b) => a.date.localeCompare(b.date))) {
     if (r.amountCents < SALARY_MIN_CENTS) continue
     const doc = onlyDigits(r.counterpartyDoc) || null
-    const name = r.counterpartyName?.trim() || prettyDescription(r.descriptionRaw)
+    const name = r.counterpartyName?.trim() || null
     const key = doc ?? normalizeText(name)
-    if (!key || (doc && savedDocs.has(doc)) || savedNames.has(normalizeText(name))) continue
+    if (!key || (doc && savedDocs.has(doc)) || (name && savedNames.has(normalizeText(name)))) continue
     const g = groups.get(key)
     groups.set(key, {
       key,
-      label: name,
+      label: name ?? prettyDescription(r.descriptionRaw),
       payerDoc: doc,
       payerName: name,
       count: (g?.count ?? 0) + 1,
@@ -78,14 +80,19 @@ export function incomeSourceFromDb(r: Record<string, unknown>): IncomeSourceRow 
 export const INCOME_SOURCE_COLUMNS = 'id, kind, payer_doc, payer_name, date_rule, fixed_day'
 
 /** Tela de salário: fontes salvas e pagadores das entradas grandes dos últimos 90 dias (RLS). */
-export async function loadSalarySetup(): Promise<{ sources: IncomeSourceRow[]; payers: PayerGroup[] }> {
+export async function loadSalarySetup(userId: string): Promise<{ sources: IncomeSourceRow[]; payers: PayerGroup[] }> {
   const db = await createServerSupabase()
   const today = toLocalDate(new Date())
+  const { data: banks, error: accErr } = await db.from('accounts').select('id').eq('user_id', userId).eq('type', 'BANK')
+  if (accErr) throw accErr
+  const bankIds = (banks ?? []).map((a) => a.id as string)
   const [sources, txs] = await Promise.all([
-    db.from('income_sources').select(INCOME_SOURCE_COLUMNS).order('created_at'),
+    db.from('income_sources').select(INCOME_SOURCE_COLUMNS).eq('user_id', userId).order('created_at'),
     db
       .from('transactions')
       .select('date, amount_cents, counterparty_doc, counterparty_name, description_raw')
+      .eq('user_id', userId)
+      .in('account_id', bankIds.length ? bankIds : ['00000000-0000-0000-0000-000000000000'])
       .eq('kind', 'income')
       .is('deleted_at', null)
       .gte('amount_cents', SALARY_MIN_CENTS)

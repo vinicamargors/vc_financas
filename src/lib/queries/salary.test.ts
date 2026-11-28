@@ -6,12 +6,13 @@ const r = (p: Partial<Parameters<typeof groupPayers>[0][number]>) => ({
 })
 
 describe('groupPayers', () => {
-  it('agrupa por documento, depois nome, depois descrição; ignora abaixo de R$ 1.000 e fontes já salvas', () => {
+  it('agrupa por documento, depois nome da contraparte (sem nenhum, fica fora); ignora abaixo de R$ 1.000 e fontes já salvas', () => {
     const rows = [
       r({ counterpartyDoc: '12.345.678/0001-90', counterpartyName: 'ACME LTDA', date: '2026-10-29', amountCents: 800_000 }),
       r({ counterpartyDoc: '12345678000190', counterpartyName: 'Acme', date: '2026-11-27', amountCents: 850_000 }),
       r({ counterpartyName: 'Beta Serviços', amountCents: 120_000 }),
       r({ descriptionRaw: 'PIX RECEBIDO', amountCents: SALARY_MIN_CENTS - 1 }),
+      r({ descriptionRaw: 'TED RECEBIDA EMPRESA X', amountCents: 900_000 }),
       r({ counterpartyName: 'Gama', amountCents: 300_000 }),
     ]
     const groups = groupPayers(rows, [{ payerDoc: null, payerName: 'gama' }])

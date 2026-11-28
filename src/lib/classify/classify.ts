@@ -80,7 +80,7 @@ export interface ClassifyResult {
   unlinked: string[]
 }
 
-const BANK_CARD_PAYMENT = /pagamento.*fatura|pag(to)?\s*fatura|fatura.*cart|pagto cartao|pagamento cartao|recebto pagto|pagto antec|pagamento antecipado/i
+export const BANK_CARD_PAYMENT = /pagamento.*fatura|pag(to)?\s*fatura|fatura.*cart|pagto cartao|pagamento cartao|recebto pagto|pagto antec|pagamento antecipado/i
 const CREDIT_CARD_PAYMENT = /pagamento (recebido|efetuado)|pagto recebido|pagamento de fatura/i
 // Mercado Pago: "Dinheiro reservado <caixinha>" / "Dinheiro retirado <caixinha>".
 const INVEST_IN = /aplica[cç][aã]o|apl\.|cofrinho|caixinha|guardar|guardado|investimento|dinheiro reservado|reserva(do|da)? (para|em)\b/i
@@ -249,13 +249,15 @@ export function classify(txs: ClassifyTx[], ctx: ClassifyContext): ClassifyResul
       overlay.set(t.id, ruleOverlay(rule, ctx))
     }
     if (t.linkedTransactionId && !linkHolds(t)) unlinked.push(t.id)
-    const source = matchIncomeSource(t, ctx.incomeSources ?? [])
+    const selfLike = isToSelf(t, ownerDocs, ownerNames) || isPluggySamePersonTransfer(t.pluggyCategory)
+    // Só entrada em conta BANK que não é dinheiro próprio pode ser de uma fonte de renda.
+    const source = !selfLike && accountType.get(t.accountId) === 'BANK' ? matchIncomeSource(t, ctx.incomeSources ?? []) : undefined
     if (t.kind === 'savings_yield') decided.set(t.id, { id: t.id, kind: 'savings_yield' })
     else if (t.linkedTransactionId && linkHolds(t))
       decided.set(t.id, { id: t.id, kind: t.kind === 'card_payment' || t.kind === 'pending_review' ? t.kind : 'transfer' })
     // Entrada de uma fonte de renda é renda, antes de qualquer par por valor.
     else if (source) decided.set(t.id, { id: t.id, kind: 'income', incomeSourceId: source.id })
-    else if (isToSelf(t, ownerDocs, ownerNames) || isPluggySamePersonTransfer(t.pluggyCategory)) ownMoney.add(t.id)
+    else if (selfLike) ownMoney.add(t.id)
   }
 
   // 3. Par casado entre contas do usuário.
