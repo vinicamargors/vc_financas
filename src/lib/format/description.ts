@@ -19,7 +19,13 @@ const PREFIXES: [RegExp, string][] = [
 
 /** Descrição legível para exibição. O texto original continua salvo intacto. */
 export function prettyDescription(raw: string): string {
-  let s = raw.replace(/\s*-?\s*docto:?\s*\d+\s*$/i, '').trim()
+  let s = raw
+    .replace(/\s*-?\s*docto:?\s*\d+\s*$/i, '')
+    // "Mlp *Loja", "Pg *Loja", "Mp*Loja": código da maquininha antes do asterisco.
+    .replace(/^[a-z]{1,4}\s*\*\s*/i, '')
+    // Parcela no fim ("9/10"): já aparece na etiqueta.
+    .replace(/\s+(?:parc(?:ela)?\s*)?\d{1,2}\s*\/\s*\d{1,2}\s*$/i, '')
+    .trim()
   let prefix = ''
   for (const [re, label] of PREFIXES) {
     if (re.test(s)) {

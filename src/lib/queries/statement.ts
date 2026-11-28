@@ -33,6 +33,7 @@ export type StatementTx = DayTx & {
 export async function loadStatement(days = 90): Promise<DayGroup<StatementTx>[]> {
   const supabase = await createServerSupabase()
   const since = toLocalDate(subDays(new Date(), days))
+  const today = toLocalDate(new Date())
   const PAGE = 1000
   const rows: NonNullable<Awaited<ReturnType<typeof fetchPage>>['data']> = []
   async function fetchPage(from: number) {
@@ -41,6 +42,8 @@ export async function loadStatement(days = 90): Promise<DayGroup<StatementTx>[]>
       .select('id, date, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, accounts(institution, name, logo_url)')
       .is('deleted_at', null)
       .gte('date', since)
+      // Parcelas futuras do cartão ficam fora do extrato (são compromissos, não lançamentos).
+      .lte('date', today)
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })

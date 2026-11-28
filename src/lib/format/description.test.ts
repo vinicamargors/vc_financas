@@ -17,4 +17,8 @@ describe('prettyDescription', () => {
   it('texto comum fica como está', () => {
     expect(prettyDescription('Netflix.com')).toBe('Netflix.com')
   })
+  it('tira código da maquininha e parcela', () => {
+    expect(prettyDescription('Mlp *Kabum-Kabum 9/10')).toBe('Kabum-Kabum')
+    expect(prettyDescription('Level Up Interactive L 6/6')).toBe('Level Up Interactive L')
+  })
 })
