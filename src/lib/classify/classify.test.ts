@@ -324,3 +324,40 @@ describe('fatura paga por Pix QR', () => {
   })
 })
 
+
+describe('fontes de renda', () => {
+  const EMPRESA = '12.345.678/0001-90'
+  const withSources: ClassifyContext = {
+    ...ctx,
+    incomeSources: [
+      { id: 'src-acme', payerDoc: '12345678000190', payerName: null },
+      { id: 'src-beta', payerDoc: null, payerName: 'Beta Servicos' },
+    ],
+  }
+
+  it('salário e PLR do mesmo pagador (CNPJ) viram income com a fonte', () => {
+    const salario = tx({ amountCents: 850_000, descriptionRaw: 'TED RECEBIDA', counterpartyDoc: EMPRESA, date: '2026-11-27' })
+    const plr = tx({ amountCents: 320_000, descriptionRaw: 'CREDITO PLR', counterpartyDoc: EMPRESA, date: '2026-11-10' })
+    const r = classify([salario, plr], withSources).decisions
+    expect(r.find((d) => d.id === salario.id)).toEqual({ id: salario.id, kind: 'income', incomeSourceId: 'src-acme' })
+    expect(r.find((d) => d.id === plr.id)).toEqual({ id: plr.id, kind: 'income', incomeSourceId: 'src-acme' })
+  })
+
+  it('reconhece pelo nome na contraparte ou na descrição (normalizados)', () => {
+    expect(one(tx({ amountCents: 500_000, counterpartyName: 'BETA SERVIÇOS LTDA' }), withSources)).toMatchObject({ incomeSourceId: 'src-beta' })
+    expect(one(tx({ amountCents: 500_000, descriptionRaw: 'PIX RECEBIDO BETA SERVICOS' }), withSources)).toMatchObject({ incomeSourceId: 'src-beta' })
+  })
+
+  it('saída para o pagador não vira renda; entrada de outro pagador fica sem fonte', () => {
+    expect(one(tx({ amountCents: -5000, counterpartyDoc: EMPRESA }), withSources)?.incomeSourceId).toBeUndefined()
+    expect(one(tx({ amountCents: 5000, counterpartyDoc: '99.999.999/0001-99' }), withSources)).toEqual(expect.not.objectContaining({ incomeSourceId: expect.anything() }))
+  })
+
+  it('salário não vira par de transferência com saída de mesmo valor', () => {
+    const salario = tx({ accountId: 'brad', amountCents: 850_000, counterpartyDoc: EMPRESA })
+    const saida = tx({ accountId: 'nu', amountCents: -850_000, descriptionRaw: 'PAGAMENTO BOLETO' })
+    const r = classify([salario, saida], withSources)
+    expect(r.links).toEqual([])
+    expect(r.decisions.find((d) => d.id === salario.id)).toMatchObject({ kind: 'income', incomeSourceId: 'src-acme' })
+  })
+})

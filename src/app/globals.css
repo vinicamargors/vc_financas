@@ -1247,3 +1247,19 @@ a.btn {
   color: var(--muted);
   font-size: 0.88rem;
 }
+
+/* Tela Salário: regra de data e botão abaixo do pagador. */
+.salary-form {
+  flex-basis: 100%;
+}
+.field select {
+  display: block;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 1rem;
+  padding: 2px 0 0;
+}

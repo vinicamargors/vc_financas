@@ -63,6 +63,23 @@ function ReviewTile({ count }: { count: number }) {
   )
 }
 
+function SalaryTile() {
+  return (
+    <div className="tiles">
+      <Link href="/config/salario" className="tile">
+        <span className="n neutral" aria-hidden="true">
+          <Icon name="pie" />
+        </span>
+        <div>
+          <span className="t">Salário</span>
+          <span className="m">Configure seu salário para calcular o livre por dia</span>
+        </div>
+        <span className="go">Configurar</span>
+      </Link>
+    </div>
+  )
+}
+
 function SavingsBlock({ totalCents, dailyYieldCents }: { totalCents: number; dailyYieldCents: number | null }) {
   return (
     <>
@@ -87,7 +104,7 @@ function SavingsBlock({ totalCents, dailyYieldCents }: { totalCents: number; dai
 export default async function InicioPage() {
   const user = await requireUser()
   const supabase = await createServerSupabase()
-  const [{ connections, summary, logos }, profile, savings, cdi, review, spend] = await Promise.all([
+  const [{ connections, summary, logos }, profile, savings, cdi, review, spend, salarySources] = await Promise.all([
     loadHomeData(),
     supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
     // Caixinhas são complemento: falha aqui não derruba o Início.
@@ -97,7 +114,10 @@ export default async function InicioPage() {
     loadReview().catch(() => null),
     // Gasto real também é complemento.
     loadRealSpending().catch(() => null),
+    // Só a contagem: sem fonte de salário, o Início mostra o atalho para configurar.
+    supabase.from('income_sources').select('id', { count: 'exact', head: true }).eq('kind', 'salary'),
   ])
+  const needsSalary = !salarySources.error && (salarySources.count ?? 0) === 0
   const name = profile.data?.display_name?.trim()
   const hello = <p className="hello">{name ? `Olá, ${name}` : 'Olá'}</p>
 
@@ -167,6 +187,7 @@ export default async function InicioPage() {
       )}
       <QuickActions reviewCount={toReview} />
       <ConnectionStatus connections={connections} />
+      {needsSalary && <SalaryTile />}
       {toReview > 0 && <ReviewTile count={toReview} />}
       {savings && savings.boxes.length > 0 && <SavingsBlock {...summarizeSavings(savings.boxes, [], cdi)} />}
     </main>

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { ClassifyTx, Kind, Rule } from '@/lib/classify/classify'
+import type { ClassifyTx, IncomeSourceMatch, Kind, Rule } from '@/lib/classify/classify'
 import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
 import { minusDays } from './classification'
 import type { MergeCandidate, ShortcutMatch, ShortcutRow } from '@/lib/shortcut/merge'
@@ -22,7 +22,7 @@ export interface ConnectionRow {
 }
 
 /** Lançamento como o classificador vê, mais a categoria/merchant gravados (para comparar). */
-export type StoredClassifyTx = ClassifyTx & { categoryId: string | null; merchantId: string | null }
+export type StoredClassifyTx = ClassifyTx & { categoryId: string | null; merchantId: string | null; incomeSourceId: string | null }
 
 export interface ClassificationData {
   /** Janela `[from, to]` em todas as contas, mais os pares de linhas ligadas (mesmo fora da janela). */
@@ -31,6 +31,7 @@ export interface ClassificationData {
   rules: Rule[]
   merchants: { id: string; categoryId: string | null }[]
   categories: { id: string; name: string }[]
+  incomeSources: IncomeSourceMatch[]
   ownerCpf: string | null
   ownerDocs: string[]
   ownerNames: string[]
@@ -41,6 +42,7 @@ export interface ClassificationPatch {
   kind: Kind
   categoryId: string | null
   merchantId: string | null
+  incomeSourceId: string | null
 }
 
 export interface ClassificationChanges {
@@ -139,10 +141,11 @@ interface TxDb {
   linked_transaction_id: string | null
   category_id: string | null
   merchant_id: string | null
+  income_source_id: string | null
 }
 
 const TX_COLUMNS =
-  'id, account_id, date, amount_cents, description_raw, pluggy_category, counterparty_name, counterparty_doc, payment_method, kind, classified_by, linked_transaction_id, category_id, merchant_id'
+  'id, account_id, date, amount_cents, description_raw, pluggy_category, counterparty_name, counterparty_doc, payment_method, kind, classified_by, linked_transaction_id, category_id, merchant_id, income_source_id'
 
 const txFromDb = (r: TxDb): StoredClassifyTx => ({
   id: r.id,
@@ -159,6 +162,7 @@ const txFromDb = (r: TxDb): StoredClassifyTx => ({
   linkedTransactionId: r.linked_transaction_id,
   categoryId: r.category_id,
   merchantId: r.merchant_id,
+  incomeSourceId: r.income_source_id,
 })
 
 const fromDb = (r: ConnectionDb): ConnectionRow => ({
@@ -355,14 +359,15 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
     },
 
     async loadClassificationData(userId, from, to) {
-      const [accounts, rules, merchants, categories, profile] = await Promise.all([
+      const [accounts, rules, merchants, categories, profile, sources] = await Promise.all([
         admin.from('accounts').select('id, type, external_id').eq('user_id', userId),
         admin.from('rules').select('match_field, pattern, merchant_id, category_id, kind').eq('user_id', userId).order('created_at'),
         admin.from('merchants').select('id, category_id').eq('user_id', userId),
         admin.from('categories').select('id, name').eq('user_id', userId),
         admin.from('profiles').select('cpf, owner_docs, owner_names').eq('user_id', userId).maybeSingle(),
+        admin.from('income_sources').select('id, payer_doc, payer_name').eq('user_id', userId).order('created_at'),
       ])
-      for (const r of [accounts, rules, merchants, categories, profile]) if (r.error) throw r.error
+      for (const r of [accounts, rules, merchants, categories, profile, sources]) if (r.error) throw r.error
       const rows: StoredClassifyTx[] = []
       for (let offset = 0; ; offset += PAGE) {
         const { data, error } = await admin
@@ -397,6 +402,11 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
         })),
         merchants: (merchants.data ?? []).map((m) => ({ id: m.id as string, categoryId: (m.category_id as string | null) ?? null })),
         categories: (categories.data ?? []).map((c) => ({ id: c.id as string, name: c.name as string })),
+        incomeSources: (sources.data ?? []).map((x) => ({
+          id: x.id as string,
+          payerDoc: (x.payer_doc as string | null) ?? null,
+          payerName: (x.payer_name as string | null) ?? null,
+        })),
         ownerCpf: (profile.data?.cpf as string | null | undefined) ?? null,
         ownerDocs: (profile.data?.owner_docs as string[] | undefined) ?? [],
         ownerNames: (profile.data?.owner_names as string[] | undefined) ?? [],
@@ -425,18 +435,21 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
           .eq('id', l.id)
         if (error) throw error
       }
-      // Decisões agrupadas por valor: um UPDATE por combinação (kind, categoria, merchant).
+      // Decisões agrupadas por valor: um UPDATE por combinação (kind, categoria, merchant, fonte de renda).
       const groups = new Map<string, { patch: Omit<ClassificationPatch, 'id'>; ids: string[] }>()
       for (const d of decisions) {
-        const key = `${d.kind}|${d.categoryId ?? ''}|${d.merchantId ?? ''}`
-        const g = groups.get(key) ?? { patch: { kind: d.kind, categoryId: d.categoryId, merchantId: d.merchantId }, ids: [] }
+        const key = `${d.kind}|${d.categoryId ?? ''}|${d.merchantId ?? ''}|${d.incomeSourceId ?? ''}`
+        const g = groups.get(key) ?? {
+          patch: { kind: d.kind, categoryId: d.categoryId, merchantId: d.merchantId, incomeSourceId: d.incomeSourceId },
+          ids: [],
+        }
         g.ids.push(d.id)
         groups.set(key, g)
       }
       for (const { patch, ids } of groups.values()) {
         for (const part of chunks(ids, ID_CHUNK)) {
           const { error } = await autoRows()
-            .update({ kind: patch.kind, category_id: patch.categoryId, merchant_id: patch.merchantId })
+            .update({ kind: patch.kind, category_id: patch.categoryId, merchant_id: patch.merchantId, income_source_id: patch.incomeSourceId })
             .eq('user_id', userId)
             .eq('classified_by', 'auto')
             .in('id', part)

@@ -37,6 +37,7 @@ export async function classifyWindow(repo: SyncRepo, userId: string, w: Classify
     ownerNames,
     accounts: data.accounts,
     rules: data.rules,
+    incomeSources: data.incomeSources,
     merchantsById: Object.fromEntries(data.merchants.map((m) => [m.id, { categoryId: m.categoryId }])),
   })
 
@@ -53,8 +54,9 @@ export async function classifyWindow(repo: SyncRepo, userId: string, w: Classify
     const fromPluggy = d.categoryName ? categoryByName.get(normalizeText(d.categoryName)) : undefined
     const categoryId = d.categoryId ?? cur.categoryId ?? fromPluggy ?? null
     const merchantId = d.merchantId ?? cur.merchantId ?? null
-    if (cur.kind === d.kind && cur.categoryId === categoryId && cur.merchantId === merchantId) continue
-    decisions.push({ id: d.id, kind: d.kind as Kind, categoryId, merchantId })
+    const incomeSourceId = d.incomeSourceId ?? null
+    if (cur.kind === d.kind && cur.categoryId === categoryId && cur.merchantId === merchantId && cur.incomeSourceId === incomeSourceId) continue
+    decisions.push({ id: d.id, kind: d.kind as Kind, categoryId, merchantId, incomeSourceId })
   }
   const unlinked = result.unlinked.filter((id) => auto(id) && byId.get(id)?.linkedTransactionId !== null)
   const links = result.links.filter((l) => auto(l.id) && byId.get(l.id)?.linkedTransactionId !== l.linkedId)

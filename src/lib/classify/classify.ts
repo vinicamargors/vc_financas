@@ -45,6 +45,14 @@ export interface ClassifyContext {
   accounts: { id: string; type: 'BANK' | 'CREDIT' }[]
   rules: Rule[]
   merchantsById: Record<string, { categoryId: string | null }>
+  /** Fontes de renda do usuário: entrada do pagador (documento ou nome) vira `income` com a fonte. */
+  incomeSources?: IncomeSourceMatch[]
+}
+
+export interface IncomeSourceMatch {
+  id: string
+  payerDoc: string | null
+  payerName: string | null
 }
 
 export interface Decision {
@@ -55,6 +63,8 @@ export interface Decision {
   /** Categoria já resolvida (da regra ou do merchant da regra). */
   categoryId?: string
   merchantId?: string
+  /** Fonte de renda reconhecida (só em `income`). */
+  incomeSourceId?: string
 }
 
 export interface Link {
@@ -125,6 +135,19 @@ function isToSelf(t: ClassifyTx, ownerDocs: Set<string>, ownerNames: string[]): 
   const solid = (x: string) => x.length >= 12 && x.split(' ').length >= 2
   const same = (a: string, b: string) => solid(a) && solid(b) && (a.startsWith(b) || b.startsWith(a))
   return ownerNames.some((o) => same(o, pretty) || (name !== '' && same(o, name)))
+}
+
+/** Fonte cujo documento (só dígitos) é o da contraparte, ou cujo nome aparece na contraparte ou na descrição. */
+function matchIncomeSource(t: ClassifyTx, sources: IncomeSourceMatch[]): IncomeSourceMatch | undefined {
+  if (t.amountCents <= 0 || sources.length === 0) return undefined
+  const doc = onlyDigits(t.counterpartyDoc)
+  const byDoc = doc ? sources.find((s) => onlyDigits(s.payerDoc) === doc) : undefined
+  if (byDoc) return byDoc
+  const texts = [normalizeText(t.counterpartyName), normalizeText(prettyDescription(t.descriptionRaw)), normalizeText(t.descriptionRaw)]
+  return sources.find((s) => {
+    const name = normalizeText(s.payerName)
+    return name !== '' && texts.some((x) => containsWords(x, name))
+  })
 }
 
 function isCardPayment(t: ClassifyTx, accountType: 'BANK' | 'CREDIT' | undefined): boolean {
@@ -226,9 +249,12 @@ export function classify(txs: ClassifyTx[], ctx: ClassifyContext): ClassifyResul
       overlay.set(t.id, ruleOverlay(rule, ctx))
     }
     if (t.linkedTransactionId && !linkHolds(t)) unlinked.push(t.id)
+    const source = matchIncomeSource(t, ctx.incomeSources ?? [])
     if (t.kind === 'savings_yield') decided.set(t.id, { id: t.id, kind: 'savings_yield' })
     else if (t.linkedTransactionId && linkHolds(t))
       decided.set(t.id, { id: t.id, kind: t.kind === 'card_payment' || t.kind === 'pending_review' ? t.kind : 'transfer' })
+    // Entrada de uma fonte de renda é renda, antes de qualquer par por valor.
+    else if (source) decided.set(t.id, { id: t.id, kind: 'income', incomeSourceId: source.id })
     else if (isToSelf(t, ownerDocs, ownerNames) || isPluggySamePersonTransfer(t.pluggyCategory)) ownMoney.add(t.id)
   }
 
