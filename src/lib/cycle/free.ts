@@ -12,6 +12,8 @@ export type FreeTx = {
   categoryId: string | null
   counterpartyName: string | null
   descriptionRaw: string
+  /** Renda extra que o dono mandou somar ao livre (`transactions.free_counted`). */
+  freeCounted?: boolean
 }
 
 export type CommitmentInput = {
@@ -29,7 +31,6 @@ export type FreeInput = {
   cycle: { start: string; end: string }
   today: string
   salaryCents: number
-  extrasCents: number
   commitments: CommitmentInput[]
   /** Lançamentos do ciclo (os de fora do intervalo são ignorados). */
   txs: FreeTx[]
@@ -48,6 +49,8 @@ export type FreeResult = {
   daysLeft: number
   commitments: CommitmentResult[]
   cardThisCycleCents: number
+  /** Renda extra marcada para somar ao livre. */
+  extrasCountedCents: number
 }
 
 export const CARD_COMMITMENT_ID = 'card'
@@ -55,6 +58,11 @@ export const CARD_COMMITMENT_ID = 'card'
 /** Saída de caixa: no banco, valor negativo, despesa ou ainda a confirmar. */
 function isCashOut(t: FreeTx): boolean {
   return t.accountType === 'BANK' && t.amountCents < 0 && (t.kind === 'expense' || t.kind === 'pending_review' || t.kind === null)
+}
+
+/** Entrada no banco marcada para somar ao livre. */
+function isCountedExtra(t: FreeTx): boolean {
+  return t.accountType === 'BANK' && t.kind === 'income' && t.amountCents > 0 && t.freeCounted === true
 }
 
 /** Saída a confirmar com texto de pagamento de fatura: já entra pela fatura, não conta de novo. */
@@ -68,13 +76,15 @@ function status(expected: number, paid: number): CommitmentStatus {
 }
 
 /**
- * Livre do ciclo (dinheiro em caixa): salário + extras − Σ max(esperado, pago) dos compromissos
+ * Livre do ciclo (dinheiro em caixa): salário + extras marcados − Σ max(esperado, pago) dos compromissos
  * (fatura inclusa) − saídas no banco que não casaram com nenhum compromisso. Compra no cartão não
  * entra (só informa `cardThisCycleCents`); transferência, aporte, resgate e rendimento ficam fora.
  */
 export function computeFree(input: FreeInput): FreeResult {
-  const { cycle, today, salaryCents, extrasCents } = input
+  const { cycle, today, salaryCents } = input
   const txs = input.txs.filter((t) => t.date >= cycle.start && t.date <= cycle.end)
+  // Só entra a renda extra que o dono marcou; Pix de amigo e extras não marcados ficam fora.
+  const extrasCents = txs.reduce((sum, t) => sum + (isCountedExtra(t) ? t.amountCents : 0), 0)
   const matched = new Set<string>()
   const text = (t: FreeTx) => [normalizeText(t.counterpartyName), normalizeText(prettyDescription(t.descriptionRaw)), normalizeText(t.descriptionRaw)]
 
@@ -145,5 +155,5 @@ export function computeFree(input: FreeInput): FreeResult {
   const freeCents = salaryCents + extrasCents - reserved - outside
   const daysLeft = Math.max(1, daysBetween(today, cycle.end) + 1)
   const freePerDayCents = freeCents > 0 ? Math.floor(freeCents / daysLeft) : 0
-  return { freeCents, freePerDayCents, daysLeft, commitments, cardThisCycleCents }
+  return { freeCents, freePerDayCents, daysLeft, commitments, cardThisCycleCents, extrasCountedCents: extrasCents }
 }

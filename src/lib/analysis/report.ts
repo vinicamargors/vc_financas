@@ -107,7 +107,6 @@ export function buildCycleReport(input: {
     cycle,
     today: input.today < cycle.end ? input.today : cycle.end,
     salaryCents: split.salaryCents,
-    extrasCents: split.extrasCents,
     commitments: input.commitments,
     txs: freeTxs,
     cardEstimateCents: Math.max(0, cardEstimateCents),

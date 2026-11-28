@@ -3,6 +3,7 @@ import { addDays } from '@/lib/cycle/businessDays'
 import { currentCycle, type Cycle } from '@/lib/cycle/cycle'
 import type { CommitmentInput, FreeTx } from '@/lib/cycle/free'
 import { pickSalaries, splitCycleIncome, type IncomeRow } from '@/lib/cycle/salary'
+import { prettyDescription } from '@/lib/format/description'
 import { toLocalDate } from '@/lib/format/date'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { minusDays } from '@/lib/sync/classification'
@@ -12,6 +13,7 @@ import { INCOME_SOURCE_COLUMNS, incomeSourceFromDb, type IncomeSourceRow } from 
 /** Janela lida: cobre o ciclo atual (até 45 dias de atraso) e o anterior, para a estimativa da fatura. */
 const WINDOW_DAYS = 120
 const PAGE = 1000
+const TX_COLUMNS = 'id, account_id, date, amount_cents, kind, category_id, counterparty_name, description_raw, income_source_id'
 
 export type RawCycleTx = {
   id: string
@@ -23,7 +25,11 @@ export type RawCycleTx = {
   counterpartyName: string | null
   descriptionRaw: string
   incomeSourceId: string | null
+  freeCounted: boolean
 }
+
+/** Renda extra reconhecida (fonte `extra`) do ciclo: fica fora do livre até ser marcada. */
+export type ExtraIncome = { id: string; date: string; amountCents: number; label: string; freeCounted: boolean }
 
 export type CycleData = {
   cycle: Cycle
@@ -31,6 +37,9 @@ export type CycleData = {
   salaryCents: number
   extrasCents: number
   salaryIds: string[]
+  extraIncomes: ExtraIncome[]
+  /** A coluna `free_counted` existe (migração aplicada): sem ela, não dá para somar ao livre. */
+  freeCountedAvailable: boolean
   commitments: CommitmentInput[]
   /** Lançamentos do ciclo que o livre usa: saídas e estornos, fatura paga e compras no cartão. */
   txs: FreeTx[]
@@ -40,7 +49,7 @@ export type CycleData = {
   cardPaidCents: number
 }
 
-const FREE_KINDS = new Set<Kind | null>(['expense', 'pending_review', null, 'refund', 'card_payment'])
+const FREE_KINDS = new Set<Kind | null>(['expense', 'pending_review', null, 'refund', 'card_payment', 'income', 'investment_in'])
 
 /** Monta, sem I/O, tudo o que `computeFree` precisa. */
 export function assembleCycleData(raw: {
@@ -50,6 +59,7 @@ export function assembleCycleData(raw: {
   /** BENEFIT (VR) fica fora do livre: a recarga não é renda de caixa e as compras não saem do caixa. */
   accounts: { id: string; type: 'BANK' | 'CREDIT' | 'BENEFIT' }[]
   txs: RawCycleTx[]
+  freeCountedAvailable?: boolean
 }): CycleData {
   const { today, sources } = raw
   const benefit = new Set(raw.accounts.filter((a) => a.type === 'BENEFIT').map((a) => a.id))
@@ -66,6 +76,13 @@ export function assembleCycleData(raw: {
   const fixedDay = salarySource?.fixedDay ?? null
   const cycle = currentCycle({ today, salaryDates: salaries.map((s) => s.date), rule, fixedDay })
   const split = splitCycleIncome(incomes, salaries, cycle)
+  const salaryIdSet = new Set(split.salaryIds)
+  const extraSources = new Set(sources.filter((s) => s.kind === 'extra').map((s) => s.id))
+  const extraIncomes: ExtraIncome[] = cashTxs
+    .filter((t) => t.kind === 'income' && t.amountCents > 0 && accountType(t) === 'BANK' && t.incomeSourceId && extraSources.has(t.incomeSourceId))
+    .filter((t) => t.date >= cycle.start && t.date <= cycle.end && !salaryIdSet.has(t.id))
+    .map((t) => ({ id: t.id, date: t.date, amountCents: t.amountCents, label: t.counterpartyName?.trim() || prettyDescription(t.descriptionRaw), freeCounted: t.freeCounted }))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
 
   const prevEnd = addDays(cycle.start, -1)
   const prev = currentCycle({ today: prevEnd, salaryDates: salaries.map((s) => s.date).filter((d) => d < cycle.start), rule, fixedDay })
@@ -82,6 +99,7 @@ export function assembleCycleData(raw: {
     txs.push({
       id: t.id, date: t.date, amountCents: t.amountCents, kind: t.kind, accountType: type,
       categoryId: t.categoryId, counterpartyName: t.counterpartyName, descriptionRaw: t.descriptionRaw,
+      freeCounted: t.freeCounted && !salaryIdSet.has(t.id),
     })
   }
 
@@ -91,6 +109,8 @@ export function assembleCycleData(raw: {
     salaryCents: split.salaryCents,
     extrasCents: split.extrasCents,
     salaryIds: split.salaryIds,
+    extraIncomes,
+    freeCountedAvailable: raw.freeCountedAvailable ?? true,
     commitments: raw.commitments,
     txs,
     cardEstimateCents: Math.max(0, cardEstimateCents),
@@ -115,17 +135,26 @@ export async function loadCycleData(userId: string): Promise<CycleData> {
   ])
   for (const r of [sources, commitments, accounts]) if (r.error) throw r.error
 
+  let freeCountedAvailable = true
   const txs: RawCycleTx[] = []
   for (let offset = 0; ; offset += PAGE) {
-    const { data, error } = await db
-      .from('transactions')
-      .select('id, account_id, date, amount_cents, kind, category_id, counterparty_name, description_raw, income_source_id')
-      .eq('user_id', userId)
-      .is('deleted_at', null)
-      .gte('date', minusDays(today, WINDOW_DAYS))
-      .order('id')
-      .range(offset, offset + PAGE - 1)
-    if (error) throw error
+    const page = (cols: string) =>
+      db
+        .from('transactions')
+        .select(cols)
+        .eq('user_id', userId)
+        .is('deleted_at', null)
+        .gte('date', minusDays(today, WINDOW_DAYS))
+        .order('id')
+        .range(offset, offset + PAGE - 1)
+    let res = freeCountedAvailable ? await page(`${TX_COLUMNS}, free_counted`) : await page(TX_COLUMNS)
+    // Migração `free_counted` ainda não aplicada: o livre segue funcionando, só sem somar extras.
+    if (res.error && freeCountedAvailable && res.error.code === '42703') {
+      freeCountedAvailable = false
+      res = await page(TX_COLUMNS)
+    }
+    if (res.error) throw res.error
+    const data = res.data as unknown as Record<string, unknown>[] | null
     for (const t of data ?? []) {
       txs.push({
         id: t.id as string,
@@ -137,6 +166,7 @@ export async function loadCycleData(userId: string): Promise<CycleData> {
         counterpartyName: (t.counterparty_name as string | null) ?? null,
         descriptionRaw: (t.description_raw as string) ?? '',
         incomeSourceId: (t.income_source_id as string | null) ?? null,
+        freeCounted: t.free_counted === true,
       })
     }
     if ((data ?? []).length < PAGE) break
@@ -160,5 +190,6 @@ export async function loadCycleData(userId: string): Promise<CycleData> {
       type: a.type === 'BENEFIT' ? ('BENEFIT' as const) : classifierAccountType(a.type as string, a.external_id as string | null),
     })),
     txs,
+    freeCountedAvailable,
   })
 }

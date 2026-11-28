@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { assembleCycleData, type RawCycleTx } from './cycle'
+import { computeFree } from '@/lib/cycle/free'
 import type { IncomeSourceRow } from './salary'
 
 const acme: IncomeSourceRow = { id: 'acme', kind: 'salary', payerDoc: '1', payerName: null, dateRule: 'penultimate_business_day', fixedDay: null }
 let seq = 0
 const tx = (p: Partial<RawCycleTx>): RawCycleTx => ({
   id: `t${++seq}`, accountId: 'bank', date: '2026-12-01', amountCents: -1000, kind: 'expense', categoryId: null,
-  counterpartyName: null, descriptionRaw: 'X', incomeSourceId: null, ...p,
+  counterpartyName: null, descriptionRaw: 'X', incomeSourceId: null, freeCounted: false, ...p,
 })
 const accounts = [{ id: 'bank', type: 'BANK' as const }, { id: 'card', type: 'CREDIT' as const }]
 
@@ -28,7 +29,7 @@ describe('assembleCycleData', () => {
     const d = assembleCycleData({ today: '2026-12-10', sources: [acme], commitments: [], accounts, txs })
     expect(d.cycle).toMatchObject({ start: '2026-11-27', end: '2026-12-29', source: 'salary' })
     expect(d).toMatchObject({ salaryCents: 850_000, extrasCents: 310_000, cardEstimateCents: 100_000, cardPaidCents: 90_000, hasSalarySource: true })
-    expect(d.txs.map((t) => t.id).sort()).toEqual(['card-side', 'cur-card', 'mkt', 'paid'])
+    expect(d.txs.map((t) => t.id).sort()).toEqual(['card-side', 'cur-card', 'mkt', 'paid', 'pix', 'plr', 'sal'])
     expect(d.txs.find((t) => t.id === 'cur-card')?.accountType).toBe('CREDIT')
   })
 
@@ -52,5 +53,21 @@ describe('assembleCycleData', () => {
     expect(d.extrasCents).toBe(0)
     expect(d.cardEstimateCents).toBe(0)
     expect(d.txs.map((t) => t.id)).toEqual(['mkt'])
+  })
+
+  it('fonte salary + fonte extra: só o salário vira salário; a renda extra é listada e fica fora do livre até ser marcada', () => {
+    const ferias: IncomeSourceRow = { id: 'ferias', kind: 'extra', payerDoc: null, payerName: 'Pagamento Ferias', dateRule: 'penultimate_business_day', fixedDay: null }
+    const txs = [
+      tx({ id: 'sal', date: '2026-11-27', amountCents: 617_598, kind: 'income', incomeSourceId: 'acme' }),
+      tx({ id: 'fer', date: '2026-11-28', amountCents: 156_675, kind: 'income', incomeSourceId: 'ferias', counterpartyName: 'Pagamento Ferias Func' }),
+      tx({ id: 'pix', date: '2026-12-02', amountCents: 10_000, kind: 'income' }),
+    ]
+    const d = assembleCycleData({ today: '2026-12-10', sources: [acme, ferias], commitments: [], accounts, txs })
+    expect(d.salaryCents).toBe(617_598)
+    expect(d.extraIncomes).toEqual([{ id: 'fer', date: '2026-11-28', amountCents: 156_675, label: 'Pagamento Ferias Func', freeCounted: false }])
+    expect(computeFree({ ...d, today: '2026-12-10' }).freeCents).toBe(617_598)
+    const on = assembleCycleData({ today: '2026-12-10', sources: [acme, ferias], commitments: [], accounts, txs: txs.map((t) => (t.id === 'fer' ? { ...t, freeCounted: true } : t)) })
+    expect(on.extraIncomes[0].freeCounted).toBe(true)
+    expect(computeFree({ ...on, today: '2026-12-10' }).freeCents).toBe(617_598 + 156_675)
   })
 })

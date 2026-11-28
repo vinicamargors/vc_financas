@@ -12,12 +12,35 @@ const tx = (p: Partial<FreeTx>): FreeTx => ({
 const c = (p: Partial<CommitmentInput>): CommitmentInput => ({
   id: `c${++seq}`, name: 'C', kind: 'fixed', amountCents: null, percent: null, percentBase: 'salary', categoryId: null, matchCounterparty: null, ...p,
 })
-const base: FreeInput = { cycle, today, salaryCents: 1_000_000, extrasCents: 0, commitments: [], txs: [], cardEstimateCents: 0, cardPaidCents: 0 }
+const base: FreeInput = { cycle, today, salaryCents: 1_000_000, commitments: [], txs: [], cardEstimateCents: 0, cardPaidCents: 0 }
 
 describe('computeFree', () => {
-  it('sem nada: livre = salário + extras; por dia divide pelos dias restantes com hoje', () => {
-    const r = computeFree({ ...base, extrasCents: 50_000 })
-    expect(r).toMatchObject({ freeCents: 1_050_000, daysLeft: 10, freePerDayCents: 105_000, commitments: [], cardThisCycleCents: 0 })
+  it('sem nada: livre = salário; por dia divide pelos dias restantes com hoje', () => {
+    const r = computeFree(base)
+    expect(r).toMatchObject({ freeCents: 1_000_000, daysLeft: 10, freePerDayCents: 100_000, commitments: [], cardThisCycleCents: 0 })
+  })
+
+  it('entradas no banco só somam ao livre quando marcadas (freeCounted); Pix de amigo e extra reconhecido ficam fora', () => {
+    const txs = [
+      tx({ amountCents: 300_000, kind: 'income' }), // PLR reconhecido, não marcado
+      tx({ amountCents: 10_000, kind: 'income' }), // Pix de amigo
+      tx({ amountCents: 156_675, kind: 'income', freeCounted: true }), // férias que o dono quis somar
+      tx({ amountCents: 50_000, kind: 'income', freeCounted: false }),
+      tx({ amountCents: 90_000, kind: 'income', freeCounted: true, accountType: 'CREDIT' }), // só BANK
+      tx({ amountCents: -5_000, kind: 'income', freeCounted: true }), // saída nunca é renda
+      tx({ amountCents: 20_000, kind: 'investment_out', freeCounted: true }), // resgate nunca soma
+      tx({ amountCents: 300, kind: 'savings_yield', freeCounted: true }),
+      tx({ amountCents: 40_000, kind: 'income', freeCounted: true, date: '2026-11-26' }), // fora do ciclo
+    ]
+    expect(computeFree({ ...base, txs }).freeCents).toBe(1_156_675)
+  })
+
+  it('renda extra marcada entra na base de percent_of_income "all"', () => {
+    const todo = c({ name: 'Reserva', kind: 'percent_of_income', percent: 10, percentBase: 'all' })
+    const txs = [tx({ amountCents: 200_000, kind: 'income', freeCounted: true }), tx({ amountCents: 500_000, kind: 'income' })]
+    const r = computeFree({ ...base, commitments: [todo], txs })
+    expect(r.commitments[0].expectedCents).toBe(120_000)
+    expect(r.freeCents).toBe(1_000_000 + 200_000 - 120_000)
   })
 
   it('fixed: pago casa pela contraparte ou descrição normalizada; reserva o maior entre esperado e pago', () => {
@@ -55,7 +78,7 @@ describe('computeFree', () => {
   it('percent_of_income: do salário ou de toda a renda', () => {
     const dizimo = c({ name: 'Doação', kind: 'percent_of_income', percent: 10 })
     const todo = c({ name: 'Reserva', kind: 'percent_of_income', percent: 5, percentBase: 'all' })
-    const r = computeFree({ ...base, extrasCents: 200_000, commitments: [dizimo, todo] })
+    const r = computeFree({ ...base, txs: [tx({ amountCents: 200_000, kind: 'income', freeCounted: true })], commitments: [dizimo, todo] })
     expect(r.commitments.map((x) => [x.expectedCents, x.status])).toEqual([[100_000, 'todo'], [60_000, 'todo']])
     expect(r.freeCents).toBe(1_200_000 - 160_000)
   })
@@ -70,12 +93,11 @@ describe('computeFree', () => {
     expect(r2.freeCents).toBe(700_000)
   })
 
-  it('compra no cartão não reduz o livre e aparece em cardThisCycleCents; transferência e aporte ficam fora', () => {
+  it('compra no cartão não reduz o livre e aparece em cardThisCycleCents; transferência fica fora', () => {
     const txs = [
       tx({ amountCents: -80_000, accountType: 'CREDIT' }),
       tx({ amountCents: 5_000, kind: 'refund', accountType: 'CREDIT' }),
       tx({ amountCents: -50_000, kind: 'transfer' }),
-      tx({ amountCents: -70_000, kind: 'investment_in' }),
       tx({ amountCents: 20_000, kind: 'investment_out' }),
       tx({ amountCents: 300, kind: 'savings_yield' }),
       tx({ amountCents: -9_000, date: '2026-11-26' }), // ciclo anterior
