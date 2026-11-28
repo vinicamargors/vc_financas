@@ -35,12 +35,12 @@ export async function loadHomeData(): Promise<{ connections: ConnectionRow[]; su
   const supabase = await createServerSupabase()
   const [conns, accs] = await Promise.all([
     supabase.from('connections').select('id, connector_name, connector_image_url, status, consent_expires_at, last_synced_at'),
-    supabase.from('accounts').select('institution, name, type, subtype, balance_cents, updated_at'),
+    supabase.from('accounts').select('institution, name, logo_url, type, subtype, balance_cents, updated_at'),
   ])
   if (conns.error) throw new Error('Falha ao carregar conexões')
   if (accs.error) throw new Error('Falha ao carregar contas')
   return {
-    logos: logoMap(conns.data ?? []),
+    logos: withAccountLogos(logoMap(conns.data ?? []), accs.data ?? []),
     connections: (conns.data ?? []).map((c) => ({
       id: c.id,
       connectorName: c.connector_name,
@@ -68,4 +68,17 @@ export function oldestHealthySync(connections: ConnectionRow[]): string | null {
     if (oldest === null || new Date(c.lastSyncedAt) < new Date(oldest)) oldest = c.lastSyncedAt
   }
   return oldest
+}
+
+/** Logo por banco: o da conta (Meu Pluggy) tem prioridade sobre o da conexão. */
+function withAccountLogos(
+  base: Map<string, string>,
+  accounts: { institution: string | null; name: string; logo_url: string | null }[],
+): Map<string, string> {
+  const m = new Map(base)
+  for (const a of accounts) {
+    const key = a.institution ?? a.name
+    if (a.logo_url && /^https:\/\//.test(a.logo_url)) m.set(key, a.logo_url)
+  }
+  return m
 }

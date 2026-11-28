@@ -116,3 +116,24 @@ export async function addItemsAction(itemIds: string[]): Promise<{ ok: true } | 
   if (added === 0) return { ok: false, message: invalid && ids.length === 1 ? INVALID_ITEM : ADD_FAILED }
   return { ok: false, message: `${added} de ${ids.length} conexões adicionadas. Tente de novo para as demais.` }
 }
+
+/** Sincroniza agora todas as conexões do usuário logado. */
+export async function syncNowAction(): Promise<void> {
+  const user = await requireUser()
+  const { data, error } = await createAdminSupabase()
+    .from('connections')
+    .select('pluggy_item_id')
+    .eq('user_id', user.id)
+  if (error) redirect(`${PAGE}?sync=erro`)
+  const sync = createProductionSync()
+  let failed = 0
+  for (const c of data ?? []) {
+    try {
+      await sync.runSync(user.id, c.pluggy_item_id as string)
+    } catch (e) {
+      failed += 1
+      console.error(`sincronizar agora falhou: ${safeErrorMessage(e)}`)
+    }
+  }
+  redirect(`${PAGE}?sync=${failed === 0 ? 'ok' : 'erro'}`)
+}

@@ -1,5 +1,6 @@
+import { detectInstitution, isMeuPluggy } from '@/lib/pluggy/institution'
 import type { PluggySource } from '@/lib/pluggy/source'
-import { mapAccount, mapTransaction, type TransactionRow } from '@/lib/pluggy/map'
+import { mapAccount, mapTransaction, type AccountRow, type TransactionRow } from '@/lib/pluggy/map'
 import { toLocalDate } from '@/lib/format/date'
 import type { SyncRepo } from './repo'
 
@@ -67,9 +68,21 @@ export async function syncItem(deps: SyncDeps, userId: string, itemId: string): 
     : minusDays(today, INITIAL_DAYS)
 
   const accounts = await guarded(source.fetchAccounts(itemId))
-  const accountRows = accounts.map((a) =>
-    mapAccount(a, { userId, connectionId: connection.id, institution: base.connectorName }),
-  )
+  const logoCache = new Map<string, string | null>()
+  const logoFor = async (institution: string): Promise<string | null> => {
+    if (!isMeuPluggy(base.connectorName) && institution === base.connectorName) return base.connectorImageUrl ?? null
+    if (!source.findConnectorLogo) return null
+    if (!logoCache.has(institution)) {
+      // Logo é enfeite: falha na busca não pode derrubar a sincronização.
+      logoCache.set(institution, await source.findConnectorLogo(institution).catch(() => null))
+    }
+    return logoCache.get(institution) ?? null
+  }
+  const accountRows: AccountRow[] = []
+  for (const a of accounts) {
+    const institution = detectInstitution(a, base.connectorName)
+    accountRows.push(mapAccount(a, { userId, connectionId: connection.id, institution, logoUrl: await logoFor(institution) }))
+  }
   const rows = await repo.upsertAccounts(accountRows)
   const byExternal = new Map(rows.map((r) => [r.externalId, r]))
 

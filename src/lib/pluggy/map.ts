@@ -9,6 +9,8 @@ export interface AccountRow {
   subtype: string | null
   name: string
   institution: string
+  /** Logo do banco (Pluggy), quando conhecido. */
+  logoUrl?: string | null
   balanceCents: number
   creditLimitCents: number | null
   closingDay: number | null
@@ -45,7 +47,7 @@ function dayOfMonth(d: Date | null | undefined): number | null {
 
 export function mapAccount(
   a: Account,
-  ctx: { userId: string; connectionId: string; institution: string },
+  ctx: { userId: string; connectionId: string; institution: string; logoUrl?: string | null },
 ): AccountRow {
   const credit = a.creditData
   return {
@@ -56,6 +58,7 @@ export function mapAccount(
     subtype: a.subtype ?? null,
     name: a.name,
     institution: ctx.institution,
+    logoUrl: ctx.logoUrl ?? null,
     balanceCents: toCents(a.balance),
     creditLimitCents: credit?.creditLimit != null ? toCents(credit.creditLimit) : null,
     closingDay: dayOfMonth(credit?.balanceCloseDate),

@@ -1,6 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireUser } from '@/lib/supabase/server'
-import { saveCredentialsAction } from './actions'
+import { saveCredentialsAction, syncNowAction } from './actions'
 import { ConnectWidget } from './connect-widget'
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -12,10 +12,11 @@ const ERROR_MESSAGES: Record<string, string> = {
 }
 
 export const metadata = { title: 'Conectar bancos' }
+export const maxDuration = 60
 
-export default async function BancosPage({ searchParams }: { searchParams: Promise<{ erro?: string; salvo?: string }> }) {
+export default async function BancosPage({ searchParams }: { searchParams: Promise<{ erro?: string; salvo?: string; sync?: string }> }) {
   const user = await requireUser()
-  const { erro, salvo } = await searchParams
+  const { erro, salvo, sync } = await searchParams
   // Só a existência da linha; o segredo nunca sai do servidor.
   const { data } = await createAdminSupabase()
     .from('pluggy_credentials')
@@ -80,6 +81,28 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
         <h2>Entrar com o Meu Pluggy</h2>
         {hasCredentials ? <ConnectWidget /> : <p>Salve as credenciais no passo 2 para continuar.</p>}
       </section>
+
+      {hasCredentials && (
+        <section className="step">
+          <h2>Sincronizar agora</h2>
+          <p>Busca saldos e transações de todos os bancos conectados sem esperar a sincronização das 6h.</p>
+          {sync === 'ok' && (
+            <p role="status" className="msg ok">
+              Sincronizado.
+            </p>
+          )}
+          {sync === 'erro' && (
+            <p role="alert" className="msg err">
+              Algum banco não sincronizou. Veja o aviso no Início.
+            </p>
+          )}
+          <form action={syncNowAction}>
+            <button type="submit" className="btn secondary">
+              Sincronizar agora
+            </button>
+          </form>
+        </section>
+      )}
     </main>
   )
 }

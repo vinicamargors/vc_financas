@@ -2,6 +2,7 @@ import { subDays } from 'date-fns'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { toLocalDate } from '@/lib/format/date'
 import { logoMap } from './logos'
+import { prettyDescription } from '@/lib/format/description'
 
 export type DayTx = { date: string; amountCents: number; deletedAt: string | null }
 export type DayGroup<T extends DayTx> = { date: string; totalCents: number; items: T[] }
@@ -37,7 +38,7 @@ export async function loadStatement(days = 90): Promise<DayGroup<StatementTx>[]>
   async function fetchPage(from: number) {
     return supabase
       .from('transactions')
-      .select('id, date, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, accounts(institution, name)')
+      .select('id, date, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, accounts(institution, name, logo_url)')
       .is('deleted_at', null)
       .gte('date', since)
       .order('date', { ascending: false })
@@ -62,9 +63,9 @@ export async function loadStatement(days = 90): Promise<DayGroup<StatementTx>[]>
         date: t.date,
         amountCents: Number(t.amount_cents),
         deletedAt: t.deleted_at,
-        description: t.description_raw,
+        description: prettyDescription(t.description_raw),
         accountLabel: acc?.institution ?? acc?.name ?? '',
-        logoUrl: logos.get(acc?.institution ?? '') ?? null,
+        logoUrl: (acc?.logo_url && /^https:\/\//.test(acc.logo_url) ? acc.logo_url : null) ?? logos.get(acc?.institution ?? '') ?? null,
         cardLast4: t.card_last4,
         installmentNumber: t.installment_number,
         installmentTotal: t.installment_total,
