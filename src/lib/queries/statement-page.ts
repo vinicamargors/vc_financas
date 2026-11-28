@@ -1,4 +1,5 @@
 import type { Filter } from '@/app/(app)/extrato/statement-filter'
+import { countsInDayTotal } from './totals'
 import type { DayGroup, DayTx } from './statement'
 
 /** Posição de um lançamento na ordem do extrato: date desc, occurred_at desc (nulls last), id desc. */
@@ -44,15 +45,18 @@ export function keysetOr(c: StatementCursor): string {
   ].join(',')
 }
 
-export type FilterPredicate = { column: 'amount_cents' | 'card_last4'; op: 'gt' | 'lt' | 'not.is'; value: number | null } | null
+export type FilterPredicate =
+  | { column: 'kind'; op: 'eq' | 'in'; value: string }
+  | { column: 'card_last4'; op: 'not.is'; value: null }
+  | null
 
 /** Filtro de UI → predicado de coluna aplicado no servidor. */
 export function filterPredicate(filter: Filter): FilterPredicate {
   switch (filter) {
     case 'entradas':
-      return { column: 'amount_cents', op: 'gt', value: 0 }
+      return { column: 'kind', op: 'in', value: '(income,refund)' }
     case 'saidas':
-      return { column: 'amount_cents', op: 'lt', value: 0 }
+      return { column: 'kind', op: 'eq', value: 'expense' }
     case 'cartao':
       return { column: 'card_last4', op: 'not.is', value: null }
     default:
@@ -74,7 +78,7 @@ export function mergeGroups<T extends DayTx & { id: string }>(base: DayGroup<T>[
       for (const it of g.items) {
         if (seen.has(it.id)) continue
         last.items.push(it)
-        last.totalCents += it.amountCents
+        if (countsInDayTotal(it.kind)) last.totalCents += it.amountCents
       }
     } else {
       out.push({ ...g, items: [...g.items] })

@@ -144,4 +144,11 @@ describe('teachPlaceCore', () => {
     s.repo.patch(s.ids[1], { descriptionRaw: 'Pix enviado' })
     await expect(teachPlaceCore(s.store, U, { ids: [s.ids[1]], displayName: 'X', categoryId: 'c1', remember: true })).rejects.toThrow()
   })
+  it('recusa transferência para pessoa mesmo que o cliente a envie', async () => {
+    const s = await places()
+    s.repo.patch(s.ids[0], { descriptionRaw: 'Pix enviado para Maria da Silva Santos' })
+    await expect(teachPlaceCore(s.store, U, { ids: [s.ids[0]], displayName: 'Maria', categoryId: 'c1', remember: true })).rejects.toThrow(/pessoa/i)
+    expect(s.rules).toEqual([])
+    expect(s.merchants).toHaveLength(0)
+  })
 })

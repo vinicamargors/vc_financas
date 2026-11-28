@@ -591,6 +591,27 @@ a {
   vertical-align: 1px;
 }
 
+.tag.warn {
+  background: transparent;
+  color: var(--warn);
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
+.spend {
+  padding: 0 20px 6px;
+}
+
+.spend .val {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.spend .pend {
+  margin-left: 8px;
+  font-size: 0.85rem;
+  color: var(--warn);
+}
+
 .empty {
   padding: 24px 20px;
   color: var(--muted);

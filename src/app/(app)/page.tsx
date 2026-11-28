@@ -7,6 +7,7 @@ import { formatDayLabel, formatTime, toLocalDate } from '@/lib/format/date'
 import { loadHomeData, oldestHealthySync } from '@/lib/queries/balances'
 import { loadSavings, summarizeSavings } from '@/lib/queries/savings'
 import { getCdiAnnual } from '@/lib/cdi'
+import { loadRealSpending } from '@/lib/queries/spending'
 import { loadReview, reviewCount } from '@/lib/queries/review'
 import { createServerSupabase, requireUser } from '@/lib/supabase/server'
 
@@ -86,7 +87,7 @@ function SavingsBlock({ totalCents, dailyYieldCents }: { totalCents: number; dai
 export default async function InicioPage() {
   const user = await requireUser()
   const supabase = await createServerSupabase()
-  const [{ connections, summary, logos }, profile, savings, cdi, review] = await Promise.all([
+  const [{ connections, summary, logos }, profile, savings, cdi, review, spend] = await Promise.all([
     loadHomeData(),
     supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
     // Caixinhas são complemento: falha aqui não derruba o Início.
@@ -94,6 +95,8 @@ export default async function InicioPage() {
     getCdiAnnual(),
     // Revisão também é complemento: sem ela, o atalho fica sem contador.
     loadReview().catch(() => null),
+    // Gasto real também é complemento.
+    loadRealSpending().catch(() => null),
   ])
   const name = profile.data?.display_name?.trim()
   const hello = <p className="hello">{name ? `Olá, ${name}` : 'Olá'}</p>
@@ -147,6 +150,21 @@ export default async function InicioPage() {
         )}
         {syncedAt && <p className="sub">{updatedLabel(syncedAt)}</p>}
       </section>
+      {spend && (
+        <section className="spend" aria-labelledby="gasto-titulo">
+          <h2 id="gasto-titulo" className="label">
+            Gasto real · 30 dias
+          </h2>
+          <p>
+            <Money cents={spend.spendingCents} className="val" />
+            {spend.pendingCents > 0 && (
+              <span className="pend">
+                + <Money cents={spend.pendingCents} /> a confirmar
+              </span>
+            )}
+          </p>
+        </section>
+      )}
       <QuickActions reviewCount={toReview} />
       <ConnectionStatus connections={connections} />
       {toReview > 0 && <ReviewTile count={toReview} />}

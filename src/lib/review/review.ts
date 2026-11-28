@@ -1,5 +1,5 @@
 import type { Kind, Rule } from '@/lib/classify/classify'
-import { patternFor } from './places'
+import { isPersonTransfer, patternFor } from './places'
 
 export type PendingChoice = 'expense' | 'transfer' | 'loan' | 'other'
 
@@ -78,6 +78,8 @@ export async function teachPlaceCore(store: ReviewStore, userId: string, input: 
   const name = input.displayName.trim()
   if (!name || input.ids.length === 0) throw new Error('Dados inválidos')
   const tx = await store.getTransaction(userId, input.ids[0])
+  // Defesa no servidor: a tela já esconde Pix/TED para pessoa, mas o cliente não é confiável.
+  if (tx && isPersonTransfer(tx.descriptionRaw)) throw new Error('Transferência para pessoa não vira regra de lugar')
   const pattern = tx ? patternFor(tx.descriptionRaw) : null
   if (!pattern) throw new Error('Descrição genérica demais para virar regra')
 
