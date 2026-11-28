@@ -71,6 +71,15 @@ describe('reconcileManuals', () => {
     expect(r).toEqual({ merges: [], doubts: [{ manualId: 'm1', candidateId: 'old' }] })
   })
 
+  it('compra antiga de mesmo valor não impede a certeza com a linha nova (café de todo dia)', () => {
+    const r = reconcileManuals(
+      [manual()],
+      [cand({ id: 'ontem', date: '2026-11-26', createdAt: '2026-11-26T20:00:00Z' }), cand({ id: 'hoje' })],
+      new Set(),
+    )
+    expect(r.merges.map((m) => m.pluggyId)).toEqual(['hoje'])
+  })
+
   it('candidato em dúvida que sumiu ou foi ligado a outro: limpa a dúvida', () => {
     expect(reconcileManuals([manual({ reconcileCandidateId: 'gone' })], [], new Set()).doubts).toEqual([{ manualId: 'm1', candidateId: null }])
     expect(reconcileManuals([manual({ reconcileCandidateId: 'p1' })], [cand()], new Set(['p1'])).doubts).toEqual([{ manualId: 'm1', candidateId: null }])

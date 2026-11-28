@@ -73,11 +73,12 @@ export function reconcileManuals(manuals: ManualRow[], candidates: ReconcileCand
       .filter((c) => !used.has(c.id) && Math.sign(c.amountCents) === Math.sign(m.amountCents) && dayDistance(c.date, m.date) <= 1)
       .sort(byCloseness)
     const exact = pool.filter((c) => c.accountId === m.accountId && c.amountCents === m.amountCents)
-    // Certeza só com linha gravada depois do manual (menos 10 min); uma compra antiga de mesmo valor vira dúvida.
-    const seenAfter = exact.length === 1 && Date.parse(exact[0].createdAt) >= since
-    if (seenAfter && (similarDescription(m.description, exact[0].description) || closeInTime(m.occurredAt, exact[0].occurredAt))) {
-      used.add(exact[0].id)
-      merges.push({ shortcut: m, pluggyId: exact[0].id })
+    // Certeza só entre linhas gravadas depois do manual (menos 10 min): uma compra antiga de mesmo valor (o café de
+    // ontem) não impede a fusão de hoje; sem linha nova, a antiga só serve para dúvida.
+    const fresh = exact.filter((c) => Date.parse(c.createdAt) >= since)
+    if (fresh.length === 1 && (similarDescription(m.description, fresh[0].description) || closeInTime(m.occurredAt, fresh[0].occurredAt))) {
+      used.add(fresh[0].id)
+      merges.push({ shortcut: m, pluggyId: fresh[0].id })
       continue
     }
     const tolerance = Math.abs(m.amountCents) * NEAR_PCT
