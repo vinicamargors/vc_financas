@@ -50,10 +50,10 @@ export function easter(year: number): string {
 
 const FIXED = ['01-01', '04-21', '05-01', '09-07', '10-12', '11-02', '11-15', '11-20', '12-25']
 
-const cache = new Map<number, string[]>()
+const cache = new Map<number, readonly string[]>()
 
 /** Feriados nacionais do ano, em ordem. Carnaval (seg e ter), Sexta-feira Santa e Corpus Christi vêm da Páscoa. */
-export function nationalHolidays(year: number): string[] {
+export function nationalHolidays(year: number): readonly string[] {
   const hit = cache.get(year)
   if (hit) return hit
   const e = easter(year)
@@ -61,6 +61,7 @@ export function nationalHolidays(year: number): string[] {
     ...FIXED.map((md) => `${year}-${md}`),
     addDays(e, -48), addDays(e, -47), addDays(e, -2), addDays(e, 60),
   ].sort()
+  Object.freeze(list)
   cache.set(year, list)
   return list
 }
