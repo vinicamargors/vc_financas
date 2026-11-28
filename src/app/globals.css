@@ -882,3 +882,42 @@ a {
   flex: none;
   background: var(--surface-2);
 }
+
+/* ---------- skeletons ---------- */
+
+.sk {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--line) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+
+.sk-line {
+  display: block;
+  height: 0.8rem;
+  border-radius: 6px;
+}
+
+.tx .nm > .sk-line {
+  margin: 3px 0;
+}
+
+.sk-block {
+  display: block;
+  border-radius: 8px;
+}
+
+@keyframes sk-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk {
+    animation: none;
+    background: var(--surface-2);
+  }
+}

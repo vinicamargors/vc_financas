@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { subDays } from 'date-fns'
 import { Icon } from '@/components/icons'
 import { toLocalDate } from '@/lib/format/date'
-import { loadStatement } from '@/lib/queries/statement'
+import { loadStatementPage } from '@/lib/queries/statement'
 import { requireUser } from '@/lib/supabase/server'
 import { StatementView } from './statement-view'
 
@@ -11,9 +11,9 @@ export const metadata = { title: 'Extrato' }
 
 export default async function ExtratoPage() {
   await requireUser()
-  const days = await loadStatement(90)
+  const first = await loadStatementPage({})
 
-  if (days.length === 0) {
+  if (first.groups.length === 0) {
     return (
       <main>
         <h1 className="title">Extrato</h1>
@@ -38,7 +38,7 @@ export default async function ExtratoPage() {
   return (
     <main>
       <h1 className="title">Extrato</h1>
-      <StatementView days={days} today={toLocalDate(now)} yesterday={toLocalDate(subDays(now, 1))} />
+      <StatementView initial={first} today={toLocalDate(now)} yesterday={toLocalDate(subDays(now, 1))} />
     </main>
   )
 }

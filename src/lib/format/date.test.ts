@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TZ, formatDayLabel, formatDayMonth, formatTime, toLocalDate } from './date'
+import { isDateOnly, transactionDate } from './date'
 
 describe('toLocalDate', () => {
   it('usa America/Sao_Paulo', () => {
@@ -20,4 +21,15 @@ describe('formatadores pt-BR', () => {
   it('formatTime usa Sao Paulo', () => expect(formatTime('2026-11-27T11:12:00Z')).toBe('08:12'))
   it('formatDayMonth usa Sao Paulo', () => expect(formatDayMonth('2026-11-28T02:30:00Z')).toBe('27/11'))
   it('formatDayLabel', () => expect(formatDayLabel('2026-11-27')).toMatch(/^27 de nov/))
+})
+
+describe('transactionDate', () => {
+  it('meia-noite UTC é só data: não volta um dia', () => {
+    expect(transactionDate('2026-11-27T00:00:00.000Z')).toBe('2026-11-27')
+    expect(isDateOnly('2026-11-27T00:00:00.000Z')).toBe(true)
+  })
+  it('com hora converte para Brasília', () => {
+    expect(transactionDate('2026-11-28T02:30:00.000Z')).toBe('2026-11-27')
+    expect(isDateOnly('2026-11-28T02:30:00.000Z')).toBe(false)
+  })
 })

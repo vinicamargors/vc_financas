@@ -22,3 +22,14 @@ export function formatTime(iso: string | Date): string {
 export function formatDayMonth(iso: string | Date): string {
   return formatInTimeZone(iso, TZ, 'dd/MM')
 }
+
+/** Instante sem hora (meia-noite UTC exata): a Pluggy usa isso para lançamentos só com data. */
+export function isDateOnly(iso: string | Date): boolean {
+  const d = new Date(iso)
+  return d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0
+}
+
+/** Data do lançamento: sem hora usa a data como veio; com hora converte para Brasília. */
+export function transactionDate(iso: string | Date): string {
+  return isDateOnly(iso) ? new Date(iso).toISOString().slice(0, 10) : toLocalDate(iso)
+}
