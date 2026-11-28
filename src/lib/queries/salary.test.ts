@@ -22,3 +22,16 @@ describe('groupPayers', () => {
     ])
   })
 })
+
+describe('groupPayers sem nome do pagador', () => {
+  it('usa descrição específica (Bradesco "VENCIMENTO FUNCIONARIO"), mas não Pix/TED genérico', () => {
+    const groups = groupPayers(
+      [
+        r({ descriptionRaw: 'VENCIMENTO FUNCIONARIO - DOCTO: 9453286', amountCents: 617_598, date: '2026-11-27' }),
+        r({ descriptionRaw: 'PIX RECEBIDO - REM Fulano 27/11', amountCents: 300_000 }),
+      ],
+      [],
+    )
+    expect(groups.map((g) => g.payerName)).toEqual(['vencimento funcionario'])
+  })
+})

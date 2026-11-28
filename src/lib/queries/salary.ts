@@ -1,3 +1,8 @@
+import { isPersonTransfer, patternFor } from '@/lib/review/places'
+
+/** Pix, TED, DOC, depósito, devolução: entrada de pessoa, nunca nome de pagador de salário. */
+const looksLikeTransfer = (d: string) =>
+  isPersonTransfer(d) || /\b(pix|ted|doc|transf\w*|deposit\w*|devolu\w*|estorno|reembolso)\b/.test(normalizeText(d))
 import { normalizeText, onlyDigits } from '@/lib/classify/normalize'
 import type { DateRule } from '@/lib/cycle/businessDays'
 import { prettyDescription } from '@/lib/format/description'
@@ -49,7 +54,9 @@ export function groupPayers(rows: IncomeCandidate[], saved: { payerDoc: string |
   for (const r of [...rows].sort((a, b) => a.date.localeCompare(b.date))) {
     if (r.amountCents < SALARY_MIN_CENTS) continue
     const doc = onlyDigits(r.counterpartyDoc) || null
-    const name = r.counterpartyName?.trim() || null
+    // Sem nome do pagador (o Bradesco manda só "VENCIMENTO FUNCIONARIO"), usa a descrição específica; Pix/TED e
+    // textos genéricos não servem, senão qualquer transferência recebida viraria salário.
+    const name = r.counterpartyName?.trim() || (looksLikeTransfer(r.descriptionRaw) ? null : patternFor(r.descriptionRaw))
     const key = doc ?? normalizeText(name)
     if (!key || (doc && savedDocs.has(doc)) || (name && savedNames.has(normalizeText(name)))) continue
     const g = groups.get(key)
