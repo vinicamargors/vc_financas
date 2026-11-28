@@ -768,6 +768,54 @@ a.btn {
   cursor: default;
 }
 
+/* Resposta ao toque em todos os botões de pílula. */
+.btn:not(:disabled) {
+  transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.12s ease;
+}
+@media (hover: hover) {
+  .btn:not(:disabled):hover {
+    opacity: 0.88;
+  }
+  .btn.secondary:not(:disabled):hover {
+    background: var(--surface-2);
+    opacity: 1;
+  }
+}
+.btn:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+.sync-progress {
+  margin-top: 12px;
+}
+.sync-progress p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.sync-bar {
+  height: 4px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.sync-bar i {
+  display: block;
+  height: 100%;
+  width: 40%;
+  border-radius: 4px;
+  background: var(--fg);
+  animation: sync-slide 1.2s ease-in-out infinite;
+}
+@keyframes sync-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:not(:disabled):active { transform: none; }
+  .sync-bar i { animation: none; width: 100%; opacity: 0.5; }
+}
+
 .btn.secondary {
   background: transparent;
   color: var(--fg);

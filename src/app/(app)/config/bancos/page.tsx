@@ -1,8 +1,10 @@
+import { formatDayLabel, formatTime, toLocalDate } from '@/lib/format/date'
 import Link from 'next/link'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireUser } from '@/lib/supabase/server'
 import { saveCredentialsAction, syncNowAction } from './actions'
 import { ConnectWidget } from './connect-widget'
+import { SyncButton } from './sync-button'
 
 const ERROR_MESSAGES: Record<string, string> = {
   credenciais: 'Client ID ou Secret incorretos. Confira no dashboard da Pluggy.',
@@ -25,6 +27,14 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
     .eq('user_id', user.id)
     .maybeSingle()
   const hasCredentials = Boolean(data)
+  const { data: conns } = await createAdminSupabase()
+    .from('connections')
+    .select('bank_data_at')
+    .eq('user_id', user.id)
+    .not('bank_data_at', 'is', null)
+    .order('bank_data_at', { ascending: true })
+    .limit(1)
+  const bankDataAt = (conns?.[0]?.bank_data_at as string | undefined) ?? null
 
   return (
     <main className="flow">
@@ -90,6 +100,13 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
           {sync === 'ok' && (
             <p role="status" className="msg ok">
               Sincronizado.
+              {bankDataAt && (
+                <>
+                  {' '}
+                  Os dados mais recentes que a Pluggy trouxe do banco são de {formatDayLabel(toLocalDate(bankDataAt))}, {formatTime(bankDataAt)}. O Meu Pluggy
+                  busca no banco uma vez por dia.
+                </>
+              )}
             </p>
           )}
           {sync === 'erro' && (
@@ -98,9 +115,7 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
             </p>
           )}
           <form action={syncNowAction}>
-            <button type="submit" className="btn secondary">
-              Sincronizar agora
-            </button>
+            <SyncButton />
           </form>
         </section>
       )}
