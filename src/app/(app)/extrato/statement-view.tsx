@@ -33,7 +33,17 @@ function SkeletonRows({ count = 4 }: { count?: number }) {
   )
 }
 
-export function StatementView({ initial, today, yesterday }: { initial: StatementPage; today: string; yesterday: string }) {
+export function StatementView({
+  initial,
+  today,
+  yesterday,
+  range,
+}: {
+  initial: StatementPage
+  today: string
+  yesterday: string
+  range: { start: string; end: string }
+}) {
   const [filter, setFilter] = useState<Filter>('tudo')
   const [groups, setGroups] = useState(initial.groups)
   const [cursor, setCursor] = useState(initial.nextCursor)
@@ -51,7 +61,7 @@ export function StatementView({ initial, today, yesterday }: { initial: Statemen
     setLoading(true)
     setError(false)
     try {
-      const page = await loadMoreStatement(cursor, filter)
+      const page = await loadMoreStatement(cursor, filter, range.start, range.end)
       if (mine !== epoch.current) return
       setGroups((g) => mergeGroups(g, page.groups))
       setCursor(page.nextCursor)
@@ -61,7 +71,7 @@ export function StatementView({ initial, today, yesterday }: { initial: Statemen
       if (mine === epoch.current) setLoading(false)
       busy.current = false
     }
-  }, [cursor, filter])
+  }, [cursor, filter, range.start, range.end])
 
   async function changeFilter(next: Filter, force = false) {
     if (next === filter && !force) return
@@ -73,7 +83,7 @@ export function StatementView({ initial, today, yesterday }: { initial: Statemen
     setError(false)
     setLoading(true)
     try {
-      const page = await loadMoreStatement(null, next)
+      const page = await loadMoreStatement(null, next, range.start, range.end)
       if (mine !== epoch.current) return
       setGroups(page.groups)
       setCursor(page.nextCursor)
@@ -104,7 +114,7 @@ export function StatementView({ initial, today, yesterday }: { initial: Statemen
         ))}
       </div>
 
-      {shown.length === 0 && !loading && !error && <p className="empty">Nada por aqui neste filtro.</p>}
+      {shown.length === 0 && !loading && !error && <p className="empty">Nada por aqui neste período e filtro.</p>}
 
       {shown.map((day) => {
         const label = dayLabel(day.date, today, yesterday)

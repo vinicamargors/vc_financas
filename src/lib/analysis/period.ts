@@ -151,3 +151,9 @@ export function limitForPeriod(monthlyCents: number | null, days: number): numbe
   if (days >= 28 && days <= 31) return monthlyCents
   return Math.round((monthlyCents * days * 12) / 365.25)
 }
+
+/** Intervalo vindo do cliente (server action): datas válidas, em ordem, até 5 anos. */
+export function parseRange(start: unknown, end: unknown): Range | null {
+  if (!isLocalDate(start) || !isLocalDate(end) || start > end || daysBetween(start, end) > MAX_SPAN_DAYS) return null
+  return { start, end }
+}
