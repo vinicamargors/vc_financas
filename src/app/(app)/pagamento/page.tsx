@@ -3,6 +3,7 @@ import { Money } from '@/components/money'
 import { computeFree, type CommitmentStatus } from '@/lib/cycle/free'
 import { formatLocalDayMonth as dm, toLocalDate } from '@/lib/format/date'
 import { loadCycleData } from '@/lib/queries/cycle'
+import { ExtraIncomeSection } from './extra-income'
 import { requireUser } from '@/lib/supabase/server'
 
 export const metadata = { title: 'Dia do pagamento' }
@@ -43,12 +44,6 @@ export default async function PagamentoPage() {
             </p>
             <p className="sub">
               Recebido em {dm(cycle.start)}
-              {data.extrasCents > 0 && (
-                <>
-                  {' '}
-                  · + <Money cents={data.extrasCents} /> de extras
-                </>
-              )}
             </p>
           </>
         ) : (
@@ -96,6 +91,8 @@ export default async function PagamentoPage() {
           </ul>
         )}
       </section>
+
+      <ExtraIncomeSection items={data.extraIncomes} canToggle={data.freeCountedAvailable} />
 
       <section className="pay-free" aria-labelledby="livre-titulo">
         <h2 id="livre-titulo" className="label">

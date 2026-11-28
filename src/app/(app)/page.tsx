@@ -17,6 +17,7 @@ import { loadBenefitWithRecharges } from '@/lib/queries/benefit'
 import { loadRealSpending } from '@/lib/queries/spending'
 import { loadReview, reviewCount } from '@/lib/queries/review'
 import { createServerSupabase, requireUser } from '@/lib/supabase/server'
+import { ExtraIncomeSection } from './pagamento/extra-income'
 import { safeErrorMessage } from '@/lib/sync/safe-error'
 
 export const dynamic = 'force-dynamic'
@@ -283,6 +284,7 @@ export default async function InicioPage() {
           {needsSalary && <SalaryTile />}
         </>
       )}
+      {cycleData && free && <ExtraIncomeSection items={cycleData.extraIncomes} canToggle={cycleData.freeCountedAvailable} />}
       {cycleData && showPaymentDay(cycleData.cycle, today) && <PaymentDayTile />}
       <section className="balance secondary" aria-labelledby="saldo-titulo">
         <h2 id="saldo-titulo" className="label">
