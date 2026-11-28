@@ -62,11 +62,28 @@ export const PLUGGY_TO_CATEGORY: [string, string][] = [
   ['online shopping', 'Compras'],
 ]
 
+/** Chaves curtas casam só a palavra inteira ("pet" não pega "competition", "rent" não pega "rental"). */
+const WHOLE_WORD = new Set(['pet', 'rent', 'ride', 'toll', 'gym', 'gift', 'book', 'water', 'fuel', 'food', 'taxi'])
+
+function matches(c: string, needle: string): boolean {
+  if (WHOLE_WORD.has(needle)) return new RegExp(`(^|[^a-z])${needle}s?([^a-z]|$)`).test(c)
+  return ` ${c}`.includes(` ${needle}`)
+}
+
 export function pluggyCategoryToName(pluggyCategory: string | null | undefined): string | null {
   const c = normalizeText(pluggyCategory)
   if (!c) return null
-  for (const [needle, name] of PLUGGY_TO_CATEGORY) if (` ${c}`.includes(` ${needle}`)) return name
+  for (const [needle, name] of PLUGGY_TO_CATEGORY) if (matches(c, needle)) return name
   return null
+}
+
+export function isPluggySamePersonTransfer(pluggyCategory: string | null | undefined): boolean {
+  return normalizeText(pluggyCategory).includes('same person transfer')
+}
+
+export function isPluggyInvestment(pluggyCategory: string | null | undefined): boolean {
+  const c = normalizeText(pluggyCategory)
+  return /\binvestment|fixed income|variable income|\bfunds?\b|proceeds|pension|savings/.test(c)
 }
 
 export function isPluggyCardPayment(pluggyCategory: string | null | undefined): boolean {

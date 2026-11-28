@@ -50,6 +50,10 @@ describe('pluggyCategoryToName', () => {
     expect(pluggyCategoryToName('Food and drinks')).toBe('Alimentação')
     expect(pluggyCategoryToName('Food delivery')).toBe('Delivery')
     expect(pluggyCategoryToName('Digital services')).toBe('Assinaturas')
+    expect(pluggyCategoryToName('Pet supplies')).toBe('Pets')
+    expect(pluggyCategoryToName('Competition')).toBeNull()
+    expect(pluggyCategoryToName('Rent')).toBe('Moradia')
+    expect(pluggyCategoryToName('Car rental')).toBeNull()
     expect(pluggyCategoryToName('Whatever')).toBeNull()
     expect(pluggyCategoryToName(null)).toBeNull()
   })
@@ -83,13 +87,32 @@ describe('classify', () => {
     expect(r.decisions.find((d) => d.id === b.id)?.kind).toBe('income')
   })
 
-  it('cada linha entra em no máximo um par', () => {
-    const out = tx({ accountId: 'brad', amountCents: -10000 })
-    const i1 = tx({ accountId: 'nu', amountCents: 10000, descriptionRaw: 'X' })
-    const i2 = tx({ accountId: 'nucard', amountCents: 10000, descriptionRaw: 'Y' })
-    const r = classify([out, i1, i2], ctx)
+  it('cada linha entra em no máximo um par; escolhe a data mais próxima', () => {
+    const accts = { ...ctx, accounts: [...ctx.accounts, { id: 'mp', type: 'BANK' as const }] }
+    const out = tx({ id: 'o1', accountId: 'brad', amountCents: -10000, date: '2026-11-27', descriptionRaw: 'TRANSFERENCIA PIX' })
+    const far = tx({ id: 'a1', accountId: 'nu', amountCents: 10000, date: '2026-11-28', descriptionRaw: 'Transferência recebida' })
+    const near = tx({ id: 'b1', accountId: 'mp', amountCents: 10000, date: '2026-11-27', descriptionRaw: 'Pix recebido' })
+    const r = classify([out, far, near], accts)
+    expect(r.links).toEqual([{ id: 'o1', linkedId: 'b1' }, { id: 'b1', linkedId: 'o1' }])
+    expect(r.decisions.find((d) => d.id === 'a1')?.kind).toBe('income')
+  })
+
+  it('cartão: saída nunca pareia; crédito só se parecer pagamento de fatura', () => {
+    const cardOut = tx({ accountId: 'nucard', amountCents: -10000, descriptionRaw: 'Mlp *Loja' })
+    const bankIn = tx({ accountId: 'brad', amountCents: 10000, descriptionRaw: 'PIX RECEBIDO - REM: Fulano' })
+    const bankOut = tx({ accountId: 'nu', amountCents: -20000, descriptionRaw: 'Transferência enviada pelo Pix' })
+    const cardIn = tx({ accountId: 'nucard', amountCents: 20000, descriptionRaw: 'Estorno Loja' })
+    const r = classify([cardOut, bankIn, bankOut, cardIn], ctx)
+    expect(r.links).toEqual([])
+    expect(r.decisions.find((d) => d.id === cardIn.id)?.kind).toBe('refund')
+  })
+
+  it('par sem nenhum sinal de transferência → pending_review nos dois', () => {
+    const out = tx({ accountId: 'brad', amountCents: -12345, descriptionRaw: 'SAUDE EMPRESA' })
+    const inn = tx({ accountId: 'nu', amountCents: 12345, descriptionRaw: 'Recebimento ACME' })
+    const r = classify([out, inn], ctx)
+    expect(r.decisions.map((d) => d.kind)).toEqual(['pending_review', 'pending_review'])
     expect(r.links).toHaveLength(2)
-    expect([i1, i2].map((t) => r.decisions.find((d) => d.id === t.id)?.kind).sort()).toEqual(['income', 'transfer'])
   })
 
   it('pagamento de fatura → card_payment (banco e cartão)', () => {
@@ -153,19 +176,72 @@ describe('classify', () => {
     expect(r.decisions.find((d) => d.id === inn.id)?.kind).toBe('income')
   })
 
-  it('par já ligado continua transfer', () => {
-    const a = tx({ amountCents: -5000, linkedTransactionId: 'zz' })
-    expect(one(a)?.kind).toBe('transfer')
+  it('par já ligado continua transfer só se o parceiro segue válido', () => {
+    const a = tx({ id: 'la', accountId: 'brad', amountCents: -5000, linkedTransactionId: 'lb', kind: 'transfer' })
+    const b = tx({ id: 'lb', accountId: 'nu', amountCents: 5000, linkedTransactionId: 'la', kind: 'transfer' })
+    expect(classify([a, b], ctx).decisions.map((d) => d.kind)).toEqual(['transfer', 'transfer'])
+    const stale = tx({ id: 'ls', amountCents: -5000, linkedTransactionId: 'zz', kind: 'transfer', descriptionRaw: 'COMPRA' })
+    const r = classify([stale], ctx)
+    expect(r.decisions[0].kind).toBe('expense')
+    expect(r.unlinked).toEqual(['ls'])
+    const userPartner = tx({ id: 'lu', accountId: 'nu', amountCents: 5000, classifiedBy: 'user', kind: 'income' })
+    const c = tx({ id: 'lc', amountCents: -5000, linkedTransactionId: 'lu', kind: 'transfer', descriptionRaw: 'COMPRA' })
+    expect(classify([c, userPartner], ctx).decisions[0].kind).toBe('expense')
+  })
+
+  it('regra sem tipo não sobrepõe o tipo estrutural', () => {
+    const c: ClassifyContext = {
+      ...ctx,
+      merchantsById: { mn: { categoryId: 'cat-x' } },
+      rules: [{ matchField: 'description', pattern: 'nubank', merchantId: 'mn', categoryId: null, kind: null }],
+    }
+    expect(one(tx({ descriptionRaw: 'PAGTO CARTAO NUBANK', amountCents: -150000 }), c)).toMatchObject({ kind: 'card_payment', merchantId: 'mn' })
+    expect(one(tx({ descriptionRaw: 'NUBANK ASSINATURA', amountCents: -1500, pluggyCategory: 'Shopping' }), c)).toEqual({
+      id: expect.any(String), kind: 'expense', merchantId: 'mn', categoryId: 'cat-x',
+    })
+  })
+
+  it('pending_review em formatos Nubank, Bradesco e Mercado Pago, com doc mascarado', () => {
+    const cases = [
+      'Transferência enviada pelo Pix - Fulano de Tal - •••.456.789-•• - BCO X',
+      'TRANSFERENCIA PIX - DES: Fulano',
+      'Pix enviado para Fulano',
+      'TRANSF CC P/ CC - Fulano',
+      'TED DIF.TITULAR - Fulano',
+    ]
+    for (const d of cases) {
+      expect(one(tx({ descriptionRaw: d, amountCents: -300000, counterpartyDoc: '***.456.789-**' }))?.kind, d).toBe('pending_review')
+    }
+    expect(one(tx({ descriptionRaw: 'PIX ENVIADO - DES: Fulano', amountCents: -300000, counterpartyDoc: '456789' }))?.kind).toBe('pending_review')
+    expect(one(tx({ descriptionRaw: 'Transferência enviada pelo Pix - Loja', amountCents: -300000, counterpartyDoc: '12345678000199' }))?.kind).toBe('expense')
+  })
+
+  it('categorias Pluggy: mesma titularidade e investimentos', () => {
+    expect(one(tx({ descriptionRaw: 'XYZ', amountCents: -50000, pluggyCategory: 'Same person transfer - PIX' }))?.kind).toBe('transfer')
+    expect(one(tx({ descriptionRaw: 'XYZ', amountCents: -50000, pluggyCategory: 'Investments' }))?.kind).toBe('investment_in')
+    expect(one(tx({ descriptionRaw: 'XYZ', amountCents: 50000, pluggyCategory: 'Fixed income' }))?.kind).toBe('investment_out')
+    expect(one(tx({ descriptionRaw: 'XYZ', amountCents: -500000, pluggyCategory: 'Transfer - PIX' }))?.kind).toBe('expense')
+  })
+
+  it('nome do dono exige 2 palavras e 12 letras', () => {
+    const c = { ...ctx, ownerNames: ['Ana Souza Lima'] }
+    expect(one(tx({ descriptionRaw: 'PIX ENVIADO - DES: Ana', amountCents: -300000, paymentMethod: 'PIX' }), c)?.kind).toBe('pending_review')
+    expect(one(tx({ descriptionRaw: 'PIX ENVIADO - DES: Ana Souza Li', amountCents: -300000, paymentMethod: 'PIX' }), c)?.kind).toBe('transfer')
   })
 
   it('é determinístico independente da ordem', () => {
-    const rows = [
-      tx({ accountId: 'brad', amountCents: -10000 }),
-      tx({ accountId: 'nu', amountCents: 10000, descriptionRaw: 'A' }),
-      tx({ accountId: 'nucard', amountCents: 10000, descriptionRaw: 'B' }),
+    const base = { date: '2026-11-27', pluggyCategory: null, counterpartyName: null, counterpartyDoc: null, paymentMethod: null, kind: null, classifiedBy: 'auto' as const, linkedTransactionId: null }
+    const rows: ClassifyTx[] = [
+      { ...base, id: 'd1', accountId: 'brad', amountCents: -10000, descriptionRaw: 'TRANSFERENCIA PIX' },
+      { ...base, id: 'd2', accountId: 'nu', amountCents: 10000, descriptionRaw: 'Pix recebido A' },
+      { ...base, id: 'd3', accountId: 'nu', amountCents: 10000, descriptionRaw: 'Pix recebido B' },
+      { ...base, id: 'd4', accountId: 'brad', amountCents: -300000, descriptionRaw: 'PIX ENVIADO - DES: X' },
     ]
-    const a = classify(rows, ctx)
-    const b = classify([...rows].reverse(), ctx)
-    expect(new Set(b.links.map((l) => `${l.id}>${l.linkedId}`))).toEqual(new Set(a.links.map((l) => `${l.id}>${l.linkedId}`)))
+    const norm = (r: ReturnType<typeof classify>) => ({
+      kinds: Object.fromEntries(r.decisions.map((d) => [d.id, d.kind])),
+      links: r.links.map((l) => `${l.id}>${l.linkedId}`).sort(),
+    })
+    expect(norm(classify([...rows].reverse(), ctx))).toEqual(norm(classify(rows, ctx)))
+    expect(norm(classify(rows, ctx)).links).toEqual(['d1>d2', 'd2>d1'])
   })
 })
