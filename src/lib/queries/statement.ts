@@ -3,6 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { toLocalDate } from '@/lib/format/date'
 import { logoMap } from './logos'
 import { prettyDescription } from '@/lib/format/description'
+import { isSavingsYield } from '@/lib/pluggy/map'
 import type { Filter } from '@/app/(app)/extrato/statement-filter'
 import { decodeCursor, encodeCursor, filterPredicate, keysetOr, type StatementCursor } from './statement-page'
 
@@ -32,10 +33,20 @@ export type StatementTx = DayTx & {
   cardLast4: string | null
   installmentNumber: number | null
   installmentTotal: number | null
+  /** Rendimento de caixinha: não conta como entrada e aparece apagado. */
+  isYield: boolean
+}
+
+export const SAVINGS_YIELD_LABEL = 'Rendimento · caixinha'
+const MERCADO_PAGO_RE = /mercado\s*pago/i
+
+/** Rendimento de caixinha: marcado na sincronização ou reconhecido pela descrição (linhas antigas). */
+export function statementYield(row: { kind: string | null; description_raw: string }, accountHasBoxes: boolean): boolean {
+  return row.kind === 'savings_yield' || isSavingsYield(row.description_raw, accountHasBoxes)
 }
 
 const COLUMNS =
-  'id, date, occurred_at, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, accounts(institution, name, logo_url)'
+  'id, date, occurred_at, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, kind, account_id, accounts(institution, name, logo_url)'
 
 export type StatementPage = { groups: DayGroup<StatementTx>[]; nextCursor: string | null }
 
@@ -60,6 +71,8 @@ export async function loadStatementPage({
   function base(from: StatementCursor | null) {
     let q = supabase.from('transactions').select(COLUMNS).is('deleted_at', null).gte('date', since).lte('date', today)
     if (pred) q = q.filter(pred.column, pred.op, pred.value === null ? null : pred.value)
+    // Rendimento de caixinha não é entrada.
+    if (filter === 'entradas') q = q.or('kind.is.null,kind.neq.savings_yield')
     if (from) q = q.or(keysetOr(from))
     return q
       .order('date', { ascending: false })
@@ -69,11 +82,14 @@ export async function loadStatementPage({
   type Row = NonNullable<Awaited<ReturnType<ReturnType<typeof base>['limit']>>['data']>[number]
   const cursorOf = (r: Row): StatementCursor => ({ date: r.date, occurredAt: r.occurred_at, id: r.id })
 
-  const [conns, page] = await Promise.all([
+  const [conns, page, boxes] = await Promise.all([
     supabase.from('connections').select('connector_name, connector_image_url'),
     base(after).limit(limit + 1),
+    supabase.from('savings_boxes').select('account_id'),
   ])
   if (conns.error) throw new Error('Falha ao carregar conexões')
+  // Sem caixinhas (ou tabela indisponível) cai só no nome do banco.
+  const boxAccounts = new Set((boxes.data ?? []).map((b) => b.account_id as string))
   if (page.error) throw new Error('Falha ao carregar o extrato')
   const logos = logoMap(conns.data ?? [])
 
@@ -97,13 +113,15 @@ export async function loadStatementPage({
   const groups = groupByDay(
     rows.map((t) => {
       const acc = Array.isArray(t.accounts) ? t.accounts[0] : t.accounts
+      const isYield = statementYield(t, boxAccounts.has(t.account_id) || MERCADO_PAGO_RE.test(acc?.institution ?? ''))
       return {
         id: t.id,
         date: t.date,
         occurredAt: t.occurred_at,
         amountCents: Number(t.amount_cents),
         deletedAt: t.deleted_at,
-        description: prettyDescription(t.description_raw),
+        description: isYield ? SAVINGS_YIELD_LABEL : prettyDescription(t.description_raw),
+        isYield,
         accountLabel: acc?.institution ?? acc?.name ?? '',
         logoUrl: (acc?.logo_url && /^https:\/\//.test(acc.logo_url) ? acc.logo_url : null) ?? logos.get(acc?.institution ?? '') ?? null,
         cardLast4: t.card_last4,

@@ -1,8 +1,15 @@
-import type { AccountRow, TransactionRow } from '@/lib/pluggy/map'
+import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
 import type { ConnectionRow, SyncRepo } from './repo'
 
 export type StoredAccount = AccountRow & { id: string }
 export type StoredTransaction = TransactionRow & { deletedAt: string | null }
+export type StoredBox = SavingsBoxRow & { id: string }
+export interface StoredBoxSnapshot {
+  userId: string
+  boxId: string
+  date: string
+  balanceCents: number
+}
 export interface StoredSnapshot {
   userId: string
   accountId: string
@@ -17,12 +24,16 @@ export function createMemoryRepo(): SyncRepo & {
     accounts: StoredAccount[]
     transactions: StoredTransaction[]
     snapshots: StoredSnapshot[]
+    boxes: StoredBox[]
+    boxSnapshots: StoredBoxSnapshot[]
   }
 } {
   const connections = new Map<string, ConnectionRow>()
   const accounts = new Map<string, StoredAccount>()
   const transactions = new Map<string, StoredTransaction>()
   const snapshots = new Map<string, StoredSnapshot>()
+  const boxes = new Map<string, StoredBox>()
+  const boxSnapshots = new Map<string, StoredBoxSnapshot>()
   let seq = 0
   const newId = () => `id-${++seq}`
 
@@ -54,7 +65,8 @@ export function createMemoryRepo(): SyncRepo & {
       for (const r of rows) {
         const key = `${r.userId}:${r.externalId}`
         keys.add(key)
-        transactions.set(key, { ...r, deletedAt: transactions.get(key)?.deletedAt ?? null })
+        const prev = transactions.get(key)
+        transactions.set(key, { ...r, kind: r.kind ?? prev?.kind, deletedAt: prev?.deletedAt ?? null })
       }
       return keys.size
     },
@@ -67,7 +79,20 @@ export function createMemoryRepo(): SyncRepo & {
     async upsertBalanceSnapshot(userId, accountId, date, balanceCents) {
       snapshots.set(`${userId}:${accountId}:${date}`, { userId, accountId, date, balanceCents })
     },
+    async upsertSavingsBoxes(rows) {
+      return rows.map((r) => {
+        const key = `${r.userId}:${r.externalId}`
+        const stored = { ...r, id: boxes.get(key)?.id ?? newId() }
+        boxes.set(key, stored)
+        return { id: stored.id, externalId: stored.externalId }
+      })
+    },
+    async upsertSavingsBoxSnapshots(userId, date, rows) {
+      for (const r of rows) boxSnapshots.set(`${userId}:${r.boxId}:${date}`, { userId, boxId: r.boxId, date, balanceCents: r.balanceCents })
+    },
     dump: () => ({
+      boxes: [...boxes.values()],
+      boxSnapshots: [...boxSnapshots.values()],
       connections: [...connections.values()],
       accounts: [...accounts.values()],
       transactions: [...transactions.values()],

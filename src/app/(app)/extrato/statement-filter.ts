@@ -11,7 +11,7 @@ export const FILTERS: { id: Filter; label: string }[] = [
 
 const MATCH: Record<Filter, (t: StatementTx) => boolean> = {
   tudo: () => true,
-  entradas: (t) => t.amountCents > 0,
+  entradas: (t) => t.amountCents > 0 && !t.isYield,
   saidas: (t) => t.amountCents < 0,
   cartao: (t) => Boolean(t.cardLast4),
 }

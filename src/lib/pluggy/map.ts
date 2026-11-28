@@ -35,6 +35,8 @@ export interface TransactionRow {
   installmentTotal: number | null
   cardLast4: string | null
   status: string | null
+  /** `savings_yield` para rendimento de caixinha; ausente = não sobrescreve o `kind` gravado. */
+  kind?: 'savings_yield'
   raw: Transaction
 }
 
@@ -70,7 +72,7 @@ export function mapAccount(
 
 export function mapTransaction(
   t: Transaction,
-  ctx: { userId: string; accountRowId: string; accountType: 'BANK' | 'CREDIT' },
+  ctx: { userId: string; accountRowId: string; accountType: 'BANK' | 'CREDIT'; hasBoxes?: boolean },
 ): TransactionRow {
   // Sinal vem do `type` (DEBIT sai, CREDIT entra); o sinal do `amount` varia por tipo de conta.
   const cents = toCents(Math.abs(t.amount))
@@ -95,6 +97,62 @@ export function mapTransaction(
     installmentTotal: cc?.totalInstallments ?? null,
     cardLast4: cc?.cardNumber ?? null,
     status: t.status ?? null,
+    ...(amountCents > 0 && isSavingsYield(t.descriptionRaw ?? t.description, ctx.hasBoxes ?? false) ? { kind: 'savings_yield' as const } : {}),
     raw: t,
   }
+}
+
+export interface SavingsBoxRow {
+  userId: string
+  /** Id da conta (linha de `accounts`) que guarda a caixinha. */
+  accountId: string
+  /** `identification` da Pluggy. */
+  externalId: string
+  name: string | null
+  balanceCents: number
+  /** Percentual do CDI (ex.: 119.9983 = 119,9983% do CDI), quando informado. */
+  cdiPercent: number | null
+}
+
+type ReservedAmount = {
+  amount?: unknown
+  currencyCode?: unknown
+  remuneration?: { indexer?: unknown; postFixedIndexerPercentage?: unknown } | null
+}
+type ReservedBalance = { name?: unknown; identification?: unknown; availableAmounts?: unknown }
+
+/**
+ * Caixinhas/cofrinhos (`bankData.reservedBalances`, ainda fora dos tipos do SDK).
+ * O dinheiro reservado não está em `balance`. Lido defensivamente do objeto cru.
+ */
+export function mapReservedBalances(account: Account, ctx: { userId: string; accountRowId: string }): SavingsBoxRow[] {
+  const bankData = (account as unknown as { bankData?: { reservedBalances?: unknown } | null }).bankData
+  const list = bankData?.reservedBalances
+  if (!Array.isArray(list)) return []
+  const out: SavingsBoxRow[] = []
+  for (const raw of list as ReservedBalance[]) {
+    if (!raw || typeof raw.identification !== 'string' || !raw.identification) continue
+    const amounts = (Array.isArray(raw.availableAmounts) ? raw.availableAmounts : []) as ReservedAmount[]
+    let cents = 0
+    let cdiPercent: number | null = null
+    for (const a of amounts) {
+      if (!a || (a.currencyCode != null && a.currencyCode !== 'BRL')) continue
+      if (typeof a.amount === 'number' && Number.isFinite(a.amount)) cents += toCents(a.amount)
+      const pct = a.remuneration?.postFixedIndexerPercentage
+      const indexer = a.remuneration?.indexer
+      if (cdiPercent === null && typeof pct === 'number' && Number.isFinite(pct) && (indexer == null || indexer === 'CDI')) {
+        cdiPercent = Math.round(pct * 100 * 10_000) / 10_000
+      }
+    }
+    const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : null
+    out.push({ userId: ctx.userId, accountId: ctx.accountRowId, externalId: raw.identification, name, balanceCents: cents, cdiPercent })
+  }
+  return out
+}
+
+const SAVINGS_YIELD_RE = /rendimento|rend\.?\s*pago|remunera[cç][aã]o/i
+
+/** Lançamento de rendimento de caixinha (não é "entrada" de verdade). */
+export function isSavingsYield(description: string | null | undefined, hasBoxes: boolean): boolean {
+  return hasBoxes && !!description && SAVINGS_YIELD_RE.test(description)
 }

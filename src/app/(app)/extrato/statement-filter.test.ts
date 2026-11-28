@@ -14,6 +14,7 @@ const tx = (id: string, amountCents: number, cardLast4: string | null = null): S
   cardLast4,
   installmentNumber: null,
   installmentTotal: null,
+  isYield: false,
 })
 
 const days: DayGroup<StatementTx>[] = [
@@ -25,6 +26,12 @@ describe('filterDays', () => {
   it('tudo devolve como veio', () => expect(filterDays(days, 'tudo')).toBe(days))
   it('entradas recalcula total e tira dias vazios', () => {
     expect(filterDays(days, 'entradas')).toEqual([{ date: '2026-11-27', totalCents: 1000, items: [days[0].items[0]] }])
+  })
+  it('entradas exclui rendimento de caixinha', () => {
+    const y = { ...tx('y', 123), isYield: true }
+    const r = filterDays([{ date: '2026-11-27', totalCents: 1123, items: [tx('a', 1000), y] }], 'entradas')
+    expect(r[0].items.map((t) => t.id)).toEqual(['a'])
+    expect(r[0].totalCents).toBe(1000)
   })
   it('saídas', () => {
     expect(filterDays(days, 'saidas').map((d) => d.totalCents)).toEqual([-600, -50])

@@ -5,6 +5,8 @@ import { Icon, type IconName } from '@/components/icons'
 import { ConnectionStatus } from '@/components/connection-status'
 import { formatDayLabel, formatTime, toLocalDate } from '@/lib/format/date'
 import { loadHomeData, oldestHealthySync } from '@/lib/queries/balances'
+import { loadSavings, summarizeSavings } from '@/lib/queries/savings'
+import { getCdiAnnual } from '@/lib/cdi'
 import { createServerSupabase, requireUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
@@ -12,7 +14,7 @@ export const dynamic = 'force-dynamic'
 const ACTIONS: { label: string; icon: IconName; href?: string }[] = [
   { label: 'Revisar', icon: 'check' },
   { label: 'Extrato', icon: 'list', href: '/extrato' },
-  { label: 'Caixinhas', icon: 'jar' },
+  { label: 'Caixinhas', icon: 'jar', href: '/caixinhas' },
   { label: 'Bancos', icon: 'bank', href: '/config/bancos' },
 ]
 
@@ -47,12 +49,36 @@ function QuickActions() {
   )
 }
 
+function SavingsBlock({ totalCents, dailyYieldCents }: { totalCents: number; dailyYieldCents: number | null }) {
+  return (
+    <>
+      <div className="sep" />
+      <Link href="/caixinhas" className="block">
+        <span className="hd">
+          Caixinhas <Icon name="chev" />
+        </span>
+        <span className="val">
+          <Money cents={totalCents} />
+        </span>
+        {dailyYieldCents != null && dailyYieldCents > 0 && (
+          <span className="meta">
+            ≈ <Money cents={dailyYieldCents} /> por dia útil
+          </span>
+        )}
+      </Link>
+    </>
+  )
+}
+
 export default async function InicioPage() {
   const user = await requireUser()
   const supabase = await createServerSupabase()
-  const [{ connections, summary, logos }, profile] = await Promise.all([
+  const [{ connections, summary, logos }, profile, savings, cdi] = await Promise.all([
     loadHomeData(),
     supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
+    // Caixinhas são complemento: falha aqui não derruba o Início.
+    loadSavings(1).catch(() => null),
+    getCdiAnnual(),
   ])
   const name = profile.data?.display_name?.trim()
   const hello = <p className="hello">{name ? `Olá, ${name}` : 'Olá'}</p>
@@ -107,6 +133,7 @@ export default async function InicioPage() {
       </section>
       <QuickActions />
       <ConnectionStatus connections={connections} />
+      {savings && savings.boxes.length > 0 && <SavingsBlock {...summarizeSavings(savings.boxes, [], cdi)} />}
     </main>
   )
 }
