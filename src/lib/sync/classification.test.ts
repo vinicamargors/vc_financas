@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { makeAccount, makeTransaction } from '@/lib/pluggy/fixtures'
 import type { PluggySource } from '@/lib/pluggy/source'
 import { reclassifyAll } from './classification'
+import { safeErrorMessage } from './safe-error'
 import { createMemoryRepo } from './memory-repo'
 import { syncItem } from './sync-item'
 
@@ -92,5 +93,47 @@ describe('classificação na sincronização', () => {
     const r = await reclassifyAll({ repo, today }, U)
     expect(r.changed).toBe(1)
     expect(repo.dump().transactions[0].kind).toBe('expense')
+  })
+  it.each([
+    ['só nome', { owner: 'Fulano de Tal da Silva', taxNumber: null }, { name: 'Fulano de Tal da Silva' }],
+    ['só CNPJ', { owner: null, taxNumber: '12.345.678/0001-90' }, { documentNumber: { type: 'CNPJ', value: '12345678000190' } }],
+  ])('transferência própria por %s continua transferência no reclassifyAll', async (_l, acc, receiver) => {
+    const repo = createMemoryRepo()
+    const t = makeTransaction({ id: 'self', description: 'Pix enviado', amount: 2000, paymentData: { paymentMethod: 'PIX', receiver } } as Partial<Transaction>)
+    await syncItem({ source: source([makeAccount({ id: 'acc-1', ...acc } as Partial<Account>)], { 'acc-1': [t] }), repo, today, now }, U, 'item-1')
+    expect(repo.dump().transactions[0].kind).toBe('transfer')
+    await reclassifyAll({ repo, today }, U)
+    expect(repo.dump().transactions[0].kind).toBe('transfer')
+  })
+
+  it('identidade do dono acumula (união) entre syncs', async () => {
+    const repo = createMemoryRepo()
+    await syncItem({ source: source([makeAccount({ id: 'acc-1', owner: 'A B C D E F G', taxNumber: CPF })], {}), repo, today, now }, U, 'item-1')
+    await syncItem({ source: source([makeAccount({ id: 'acc-1', owner: 'Outro Nome Longo', taxNumber: '12.345.678/0001-90' })], {}), repo, today, now }, U, 'item-1')
+    const p = repo.dump().profiles.get(U)!
+    expect(p.ownerDocs.sort()).toEqual(['12345678000190', '12345678909'])
+    expect(p.ownerNames.sort()).toEqual(['A B C D E F G', 'Outro Nome Longo'])
+  })
+
+  it('falha na classificação não derruba a sync nem marca SYNC_ERROR', async () => {
+    const repo = createMemoryRepo()
+    repo.loadClassificationData = async () => {
+      throw Object.assign(new Error('boom'), { details: 'cpf 12345678909' })
+    }
+    const logs: string[] = []
+    const r = await syncItem({ source: source([makeAccount({ id: 'acc-1' })], { 'acc-1': [market] }), repo, today, now, log: (m) => logs.push(m) }, U, 'item-1')
+    expect(r.status).toBe('UPDATED')
+    expect(repo.dump().connections[0]).toMatchObject({ status: 'UPDATED', lastSyncedAt: now().toISOString() })
+    expect(repo.dump().transactions).toHaveLength(1)
+    expect(logs.join()).toContain('boom')
+    expect(logs.join()).not.toContain('12345678909')
+  })
+})
+
+describe('safeErrorMessage', () => {
+  it('nunca inclui details/hint do PostgREST', () => {
+    const e = { code: '23505', message: 'dup', details: 'Key (cpf)=(12345678909)', hint: 'cpf 12345678909' }
+    expect(safeErrorMessage(e)).toBe('23505')
+    expect(safeErrorMessage({ message: 'x', details: '12345678909', hint: '12345678909' })).toBe('x')
   })
 })

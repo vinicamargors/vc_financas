@@ -3,6 +3,7 @@ import { toLocalDate } from '@/lib/format/date'
 import { loadPluggySource, type PluggySource } from '@/lib/pluggy/source'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { reclassifyAll } from './classification'
+import { safeErrorMessage } from './safe-error'
 import { createSupabaseSyncRepo, type SyncRepo } from './repo'
 import { deleteTransactions, syncItem, type SyncResult } from './sync-item'
 
@@ -62,16 +63,6 @@ export async function runDailySync(deps: {
   return { ok, failed }
 }
 
-/** Erros do SDK da Pluggy carregam a requisição (headers com segredos): só código/mensagem saem daqui. */
-export function safeErrorMessage(e: unknown): string {
-  let detail = 'erro desconhecido'
-  if (typeof e === 'object' && e !== null) {
-    const o = e as { code?: unknown; message?: unknown }
-    if (typeof o.code === 'number' || typeof o.code === 'string') detail = String(o.code)
-    else if (typeof o.message === 'string' && o.message) detail = o.message
-  }
-  return detail.slice(0, 200)
-}
 
 export interface RecordingSyncDeps {
   loadSource(userId: string): Promise<PluggySource>
@@ -144,3 +135,5 @@ export function createProductionSync() {
     log,
   }
 }
+
+export { safeErrorMessage }

@@ -28,6 +28,8 @@ export interface ClassificationData {
   merchants: { id: string; categoryId: string | null }[]
   categories: { id: string; name: string }[]
   ownerCpf: string | null
+  ownerDocs: string[]
+  ownerNames: string[]
 }
 
 export interface ClassificationPatch {
@@ -58,8 +60,11 @@ export interface SyncRepo {
   upsertSavingsBoxes(rows: SavingsBoxRow[]): Promise<{ id: string; externalId: string }[]>
   /** Conflito em `user_id,box_id,date`: mesmo dia sobrescreve. */
   upsertSavingsBoxSnapshots(userId: string, date: string, rows: { boxId: string; balanceCents: number }[]): Promise<void>
-  /** Grava `profiles.cpf` (só dígitos) quando ainda está vazio. */
-  saveOwnerCpfIfEmpty(userId: string, cpf: string): Promise<void>
+  /**
+   * União em `profiles.owner_docs` (só dígitos, CPF e CNPJ) e `owner_names`; grava `profiles.cpf`
+   * com o primeiro CPF quando vazio. Nunca logar.
+   */
+  mergeOwnerIdentity(userId: string, docs: string[], names: string[]): Promise<void>
   loadClassificationData(userId: string, from: string, to: string): Promise<ClassificationData>
   /** Aplica na ordem unlinked → links → decisions, só em linhas `classified_by = 'auto'`. */
   applyClassification(userId: string, changes: ClassificationChanges): Promise<void>
@@ -302,13 +307,21 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
       if (error) throw error
     },
 
-    async saveOwnerCpfIfEmpty(userId, cpf) {
-      const { error } = await admin
-        .from('profiles')
-        .update({ cpf })
-        .eq('user_id', userId)
-        .or('cpf.is.null,cpf.eq.')
+    async mergeOwnerIdentity(userId, docs, names) {
+      const cleanDocs = docs.map((d) => d.replace(/\D/g, '')).filter(Boolean)
+      const cleanNames = names.map((n) => n.trim()).filter(Boolean)
+      if (cleanDocs.length === 0 && cleanNames.length === 0) return
+      const { data, error } = await admin.from('profiles').select('cpf, owner_docs, owner_names').eq('user_id', userId).maybeSingle()
       if (error) throw error
+      if (!data) return
+      const ownerDocs = [...new Set([...((data.owner_docs as string[]) ?? []), ...cleanDocs])]
+      const ownerNames = [...new Set([...((data.owner_names as string[]) ?? []), ...cleanNames])]
+      const cpf = (data.cpf as string | null) || cleanDocs.find((d) => d.length === 11) || null
+      const { error: upErr } = await admin
+        .from('profiles')
+        .update({ owner_docs: ownerDocs, owner_names: ownerNames, cpf })
+        .eq('user_id', userId)
+      if (upErr) throw upErr
     },
 
     async loadClassificationData(userId, from, to) {
@@ -317,7 +330,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
         admin.from('rules').select('match_field, pattern, merchant_id, category_id, kind').eq('user_id', userId).order('created_at'),
         admin.from('merchants').select('id, category_id').eq('user_id', userId),
         admin.from('categories').select('id, name').eq('user_id', userId),
-        admin.from('profiles').select('cpf').eq('user_id', userId).maybeSingle(),
+        admin.from('profiles').select('cpf, owner_docs, owner_names').eq('user_id', userId).maybeSingle(),
       ])
       for (const r of [accounts, rules, merchants, categories, profile]) if (r.error) throw r.error
       const rows: StoredClassifyTx[] = []
@@ -355,10 +368,14 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
         merchants: (merchants.data ?? []).map((m) => ({ id: m.id as string, categoryId: (m.category_id as string | null) ?? null })),
         categories: (categories.data ?? []).map((c) => ({ id: c.id as string, name: c.name as string })),
         ownerCpf: (profile.data?.cpf as string | null | undefined) ?? null,
+        ownerDocs: (profile.data?.owner_docs as string[] | undefined) ?? [],
+        ownerNames: (profile.data?.owner_names as string[] | undefined) ?? [],
       }
     },
 
     async applyClassification(userId, { unlinked, links, decisions }) {
+      // Não é atômico (vários UPDATEs): se cair no meio, a próxima rodada compara com o gravado e
+      // completa só o que faltou (o serviço envia apenas diferenças).
       // Toda escrita filtra user_id e classified_by = 'auto' (a escolha do usuário nunca é sobrescrita).
       const autoRows = () => admin.from('transactions')
       for (const part of chunks(unlinked, ID_CHUNK)) {

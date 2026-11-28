@@ -72,6 +72,10 @@ do $$ begin
   end if;
 end $$;
 
+-- Identidade do dono (CPF/CNPJ só dígitos e nomes vindos da Pluggy), para achar transferência própria.
+alter table public.profiles add column if not exists owner_docs text[] not null default '{}';
+alter table public.profiles add column if not exists owner_names text[] not null default '{}';
+
 create index if not exists transactions_category_idx on public.transactions (category_id);
 create index if not exists transactions_merchant_idx on public.transactions (merchant_id);
 

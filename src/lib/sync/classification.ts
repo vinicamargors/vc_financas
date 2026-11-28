@@ -5,6 +5,7 @@ import type { ClassificationPatch, SyncRepo } from './repo'
 const DAY_MS = 86_400_000
 const RECLASSIFY_DAYS = 90
 
+/** `YYYY-MM-DD` menos `days` dias (aritmética em meio-dia UTC, sem efeito de DST). */
 export function minusDays(date: string, days: number): string {
   return new Date(Date.parse(`${date}T12:00:00Z`) - days * DAY_MS).toISOString().slice(0, 10)
 }
@@ -12,7 +13,7 @@ export function minusDays(date: string, days: number): string {
 export interface ClassifyWindow {
   from: string
   to: string
-  /** CPF/CNPJ do dono vindos da Pluggy nesta sync (o CPF do perfil entra sempre). */
+  /** CPF/CNPJ do dono vindos da Pluggy nesta sync (somados aos já gravados no perfil). */
   ownerDocs?: string[]
   ownerNames?: string[]
 }
@@ -23,11 +24,12 @@ export interface ClassifyWindow {
  */
 export async function classifyWindow(repo: SyncRepo, userId: string, w: ClassifyWindow): Promise<{ changed: number }> {
   const data = await repo.loadClassificationData(userId, w.from, w.to)
-  const ownerDocs = [...new Set([...(w.ownerDocs ?? []), data.ownerCpf ?? ''].map(onlyDigits).filter(Boolean))]
+  const ownerDocs = [...new Set([...(w.ownerDocs ?? []), ...data.ownerDocs, data.ownerCpf ?? ''].map(onlyDigits).filter(Boolean))]
+  const ownerNames = [...new Set([...(w.ownerNames ?? []), ...data.ownerNames].filter(Boolean))]
   const txs: ClassifyTx[] = data.transactions
   const result = classify(txs, {
     ownerDocs,
-    ownerNames: w.ownerNames ?? [],
+    ownerNames,
     accounts: data.accounts,
     rules: data.rules,
     merchantsById: Object.fromEntries(data.merchants.map((m) => [m.id, { categoryId: m.categoryId }])),

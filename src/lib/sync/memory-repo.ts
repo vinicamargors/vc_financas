@@ -12,6 +12,11 @@ export type StoredTransaction = Omit<TransactionRow, 'kind'> & {
   merchantId: string | null
   linkedTransactionId: string | null
 }
+export interface MemoryProfile {
+  cpf: string | null
+  ownerDocs: string[]
+  ownerNames: string[]
+}
 export interface Seed {
   categories?: { id: string; userId: string; name: string }[]
   merchants?: { id: string; userId: string; categoryId: string | null }[]
@@ -39,7 +44,7 @@ export function createMemoryRepo(): SyncRepo & {
   patch(id: string, p: Partial<StoredTransaction>): void
   calls: { applyClassification: ClassificationChanges[] }
   dump(): {
-    profiles: Map<string, { cpf: string | null }>
+    profiles: Map<string, MemoryProfile>
     connections: ConnectionRow[]
     accounts: StoredAccount[]
     transactions: StoredTransaction[]
@@ -54,7 +59,7 @@ export function createMemoryRepo(): SyncRepo & {
   const snapshots = new Map<string, StoredSnapshot>()
   const boxes = new Map<string, StoredBox>()
   const boxSnapshots = new Map<string, StoredBoxSnapshot>()
-  const profiles = new Map<string, { cpf: string | null }>()
+  const profiles = new Map<string, MemoryProfile>()
   const categories: NonNullable<Seed['categories']> = []
   const merchants: NonNullable<Seed['merchants']> = []
   const rules: NonNullable<Seed['rules']> = []
@@ -125,9 +130,14 @@ export function createMemoryRepo(): SyncRepo & {
     async upsertSavingsBoxSnapshots(userId, date, rows) {
       for (const r of rows) boxSnapshots.set(`${userId}:${r.boxId}:${date}`, { userId, boxId: r.boxId, date, balanceCents: r.balanceCents })
     },
-    async saveOwnerCpfIfEmpty(userId, cpf) {
-      const p = profiles.get(userId)
-      if (!p?.cpf) profiles.set(userId, { cpf })
+    async mergeOwnerIdentity(userId, docs, names) {
+      const p = profiles.get(userId) ?? { cpf: null, ownerDocs: [], ownerNames: [] }
+      const ds = docs.map((d) => d.replace(/\D/g, '')).filter(Boolean)
+      profiles.set(userId, {
+        cpf: p.cpf || ds.find((d) => d.length === 11) || null,
+        ownerDocs: [...new Set([...p.ownerDocs, ...ds])],
+        ownerNames: [...new Set([...p.ownerNames, ...names.map((n) => n.trim()).filter(Boolean)])],
+      })
     },
     async loadClassificationData(userId, from, to) {
       const live = [...transactions.values()].filter((t) => t.userId === userId && !t.deletedAt)
@@ -156,6 +166,8 @@ export function createMemoryRepo(): SyncRepo & {
         merchants: merchants.filter((m) => m.userId === userId).map((m) => ({ id: m.id, categoryId: m.categoryId })),
         categories: categories.filter((c) => c.userId === userId).map((c) => ({ id: c.id, name: c.name })),
         ownerCpf: profiles.get(userId)?.cpf ?? null,
+        ownerDocs: profiles.get(userId)?.ownerDocs ?? [],
+        ownerNames: profiles.get(userId)?.ownerNames ?? [],
       }
     },
     async applyClassification(userId, changes) {
@@ -181,7 +193,7 @@ export function createMemoryRepo(): SyncRepo & {
       categories.push(...(s.categories ?? []))
       merchants.push(...(s.merchants ?? []))
       rules.push(...(s.rules ?? []))
-      for (const [u, cpf] of Object.entries(s.profileCpf ?? {})) profiles.set(u, { cpf })
+      for (const [u, cpf] of Object.entries(s.profileCpf ?? {})) profiles.set(u, { cpf, ownerDocs: [], ownerNames: [] })
     },
     patch(id, p) {
       const t = txById(id)

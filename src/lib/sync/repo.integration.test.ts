@@ -54,8 +54,8 @@ describe.skipIf(!enabled)('createSupabaseSyncRepo (Supabase local)', () => {
     expect(t.get('c-out')?.linked_transaction_id).toBe(t.get('c-in')?.id)
     expect(t.get('c-in')?.linked_transaction_id).toBe(t.get('c-out')?.id)
     expect(t.get('c-mkt')).toMatchObject({ kind: 'expense', categories: { name: 'Mercado' } })
-    const profile = await admin.from('profiles').select('cpf').eq('user_id', uid).single()
-    expect(profile.data?.cpf).toBe('12345678909')
+    const profile = await admin.from('profiles').select('cpf, owner_docs, owner_names').eq('user_id', uid).single()
+    expect(profile.data).toEqual({ cpf: '12345678909', owner_docs: ['12345678909'], owner_names: ['Fulano de Tal da Silva'] })
 
     await admin.from('transactions').update({ kind: 'income', classified_by: 'user' }).eq('id', t.get('c-user')!.id)
     await syncItem(deps, uid, 'item-cls')
