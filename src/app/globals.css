@@ -1446,7 +1446,7 @@ a.btn {
 .kv li:last-child {
   border-bottom: 0;
 }
-.kv li span:first-child {
+.kv li > span:first-child {
   color: var(--muted);
 }
 .check-row {
@@ -1494,4 +1494,232 @@ fieldset.field {
   padding: 8px 16px;
   font-size: 0.85rem;
   text-decoration: none;
+}
+
+/* Período (Gastos, Extrato): chips de tipo e navegação. */
+a.chip[aria-current="true"] {
+  background: var(--pill);
+  color: var(--pill-fg);
+  border-color: var(--pill);
+}
+.period-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 4px;
+}
+.period-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.period-step {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 1.3rem;
+  color: var(--muted);
+}
+a.period-step:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+.period-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 4px;
+  flex-wrap: wrap;
+}
+.period-range input {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+/* Gastos por categoria: barras sólidas pelos tokens (laranja > 80%, vermelho > 100% do limite). */
+.cat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 8px;
+}
+.cat-row {
+  display: block;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.cat-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.95rem;
+}
+.cat-top b {
+  font-weight: 600;
+}
+.cat-bar {
+  display: block;
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.cat-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--fg);
+}
+.cat-bar.plain i {
+  background: var(--muted);
+}
+.cat-bar.warn i {
+  background: var(--warn);
+}
+.cat-bar.over i {
+  background: var(--bad);
+}
+.cat-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.cat-meta .warn {
+  color: var(--warn);
+}
+.cat-meta .over,
+.cat-meta .up {
+  color: var(--bad);
+}
+.cat-meta .down {
+  color: var(--in);
+}
+.balance .up {
+  color: var(--bad);
+}
+.balance .down {
+  color: var(--in);
+}
+.cat-foot {
+  padding: 8px 20px 16px;
+  font-size: 0.75rem;
+}
+.cat-form {
+  display: grid;
+  grid-template-columns: 1fr 8rem auto;
+  gap: 8px;
+  align-items: end;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.tx.tx-plain {
+  grid-template-columns: 1fr auto;
+}
+
+/* Calendário de gastos: intensidade pela mistura do laranja do tema com a superfície. */
+.title-actions {
+  display: flex;
+  gap: 8px;
+  margin-right: 20px;
+}
+.title-actions .btn {
+  width: auto;
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+}
+.cal-total {
+  padding: 0 20px 8px;
+  text-align: center;
+}
+.cal {
+  width: calc(100% - 24px);
+  margin: 0 12px;
+  border-collapse: separate;
+  border-spacing: 4px;
+  table-layout: fixed;
+}
+.cal th {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--faint);
+  padding-bottom: 2px;
+}
+.cal td {
+  padding: 0;
+}
+.cal-day {
+  --heat: 0%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 3.1rem;
+  padding: 5px 4px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warn) var(--heat), var(--surface));
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.cal-day b {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.cal-day.future {
+  opacity: 0.35;
+}
+.cal-v {
+  font-size: 0.6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-legend {
+  padding: 6px 20px 0;
+  font-size: 0.72rem;
+}
+.cal-chart {
+  padding: 0 16px;
+}
+.cal-sk {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding: 0 16px 16px;
+}
+.cal-sk .sk {
+  height: 3.1rem;
+  border-radius: 10px;
+}
+.chart .bar-in {
+  fill: var(--in);
+}
+.chart .bar-out {
+  fill: var(--fg);
+}
+
+/* Relatório do ciclo */
+.step .up,
+.kv .up {
+  color: var(--bad);
+}
+.step .down,
+.kv .down {
+  color: var(--in);
+}
+.kv li > span:last-child {
+  text-align: right;
+}
+.period-label .tag {
+  margin-left: 6px;
+  text-transform: none;
 }

@@ -12,7 +12,7 @@ const LABEL_GAP = 12
 const TICKS = 4
 
 /** Passo "redondo" (1, 2, 2,5 ou 5 × 10^n) que cobre `raw`. */
-function niceStep(raw: number): number {
+export function niceStep(raw: number): number {
   if (raw <= 0) return 1
   const p = Math.pow(10, Math.floor(Math.log10(raw)))
   for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= raw) return m * p

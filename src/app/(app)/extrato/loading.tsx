@@ -3,6 +3,14 @@ export default function Loading() {
     <main aria-busy="true" aria-label="Carregando extrato">
       <h1 className="title">Extrato</h1>
       <div className="chips" aria-hidden="true">
+        {[2.8, 3.8, 3.2, 2.8, 2.6, 6.4].map((w, i) => (
+          <span key={i} className="sk" style={{ width: `${w}rem`, height: '2rem', borderRadius: 99, flex: 'none' }} />
+        ))}
+      </div>
+      <div className="period-nav" aria-hidden="true">
+        <span className="sk sk-line" style={{ width: '9rem', margin: '10px auto' }} />
+      </div>
+      <div className="chips" aria-hidden="true">
         {[3.2, 4.6, 3.8, 3.8].map((w, i) => (
           <span key={i} className="sk" style={{ width: `${w}rem`, height: '2rem', borderRadius: 99, flex: 'none' }} />
         ))}

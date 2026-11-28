@@ -62,21 +62,25 @@ export async function loadStatementPage({
   filter = 'tudo',
   limit = 50,
   days = 90,
+  range,
 }: {
   cursor?: string | null
   filter?: Filter
   limit?: number
   days?: number
+  /** Período escolhido; sem ele, os últimos `days` dias. Nunca passa de hoje. */
+  range?: { start: string; end: string }
 }): Promise<StatementPage> {
   const supabase = await createServerSupabase()
-  const since = toLocalDate(subDays(new Date(), days))
   const today = toLocalDate(new Date())
+  const since = range?.start ?? toLocalDate(subDays(new Date(), days))
+  const until = range && range.end < today ? range.end : today
   const after: StatementCursor | null = cursor ? decodeCursor(cursor) : null
   const pred = filterPredicate(filter)
 
   // Parcelas futuras do cartão ficam fora do extrato (são compromissos, não lançamentos).
   function base(from: StatementCursor | null) {
-    let q = supabase.from('transactions').select(COLUMNS).is('deleted_at', null).gte('date', since).lte('date', today)
+    let q = supabase.from('transactions').select(COLUMNS).is('deleted_at', null).gte('date', since).lte('date', until)
     if (pred) q = q.filter(pred.column, pred.op, pred.value === null ? null : pred.value)
     if (from) q = q.or(keysetOr(from))
     return q
