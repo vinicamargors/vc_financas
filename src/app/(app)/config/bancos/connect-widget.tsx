@@ -10,6 +10,7 @@ export function ConnectWidget() {
   const [pending, startTransition] = useTransition()
   const [discovery, setDiscovery] = useState<DiscoverResult | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [added, setAdded] = useState(0)
   const [done, setDone] = useState(false)
   const [manualId, setManualId] = useState('')
 
@@ -17,15 +18,31 @@ export function ConnectWidget() {
     startTransition(async () => {
       setMessage(null)
       const r = await addItemsAction(ids)
-      if (r.ok) setDone(true)
+      if (r.ok) {
+        setAdded((n) => n + ids.length)
+        setDiscovery(null)
+        setManualId('')
+        setDone(true)
+      }
       else setMessage(r.message)
     })
 
-  if (done) return <p role="status" className="msg ok">Conexão salva. As transações dos últimos 90 dias estão sendo importadas.</p>
+  if (done)
+    return (
+      <div>
+        <p role="status" className="msg ok">
+          {added === 1 ? '1 banco conectado.' : `${added} bancos conectados.`} As transações dos últimos 90 dias estão sendo importadas.
+        </p>
+        <p>O Meu Pluggy libera um banco por vez. Repita para cada banco que você conectou lá.</p>
+        <button type="button" className="btn" onClick={() => setDone(false)}>
+          Conectar outro banco
+        </button>
+      </div>
+    )
 
   return (
     <div>
-      <p>Abra o Meu Pluggy para escolher as conexões que este app vai acompanhar.</p>
+      <p>Abra o Meu Pluggy e escolha um banco. Depois repita para os outros.</p>
       <button
         type="button"
         className="btn"
