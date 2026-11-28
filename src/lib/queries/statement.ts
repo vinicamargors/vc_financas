@@ -24,6 +24,8 @@ export type StatementTx = DayTx & {
   id: string
   description: string
   accountLabel: string
+  /** Instante com hora, quando conhecido. */
+  occurredAt: string | null
   logoUrl: string | null
   cardLast4: string | null
   installmentNumber: number | null
@@ -39,12 +41,13 @@ export async function loadStatement(days = 90): Promise<DayGroup<StatementTx>[]>
   async function fetchPage(from: number) {
     return supabase
       .from('transactions')
-      .select('id, date, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, accounts(institution, name, logo_url)')
+      .select('id, date, occurred_at, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, accounts(institution, name, logo_url)')
       .is('deleted_at', null)
       .gte('date', since)
       // Parcelas futuras do cartão ficam fora do extrato (são compromissos, não lançamentos).
       .lte('date', today)
       .order('date', { ascending: false })
+      .order('occurred_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .range(from, from + PAGE - 1)
@@ -64,6 +67,7 @@ export async function loadStatement(days = 90): Promise<DayGroup<StatementTx>[]>
       return {
         id: t.id,
         date: t.date,
+        occurredAt: t.occurred_at,
         amountCents: Number(t.amount_cents),
         deletedAt: t.deleted_at,
         description: prettyDescription(t.description_raw),

@@ -5,6 +5,7 @@ import type { DayGroup, StatementTx } from '@/lib/queries/statement'
 const tx = (id: string, amountCents: number, cardLast4: string | null = null): StatementTx => ({
   id,
   logoUrl: null,
+  occurredAt: null,
   date: '2026-11-27',
   amountCents,
   deletedAt: null,

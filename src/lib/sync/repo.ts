@@ -135,6 +135,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
             external_id: r.externalId,
             source: r.source,
             date: r.date,
+            occurred_at: r.occurredAt,
             amount_cents: r.amountCents,
             description_raw: r.descriptionRaw,
             pluggy_category: r.pluggyCategory,

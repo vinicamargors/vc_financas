@@ -1,5 +1,6 @@
 'use client'
 
+import { formatTime } from '@/lib/format/date'
 import { BankMark } from '@/components/bank-mark'
 import { useMemo, useState } from 'react'
 import { Money } from '@/components/money'
@@ -52,7 +53,7 @@ export function StatementView({ days, today, yesterday }: { days: DayGroup<State
                     </b>
                     <span>
                       {t.accountLabel ? <BankMark institution={t.accountLabel} logoUrl={t.logoUrl} /> : null}
-                      {[t.accountLabel, t.cardLast4 ? `cartão •••• ${t.cardLast4}` : null].filter(Boolean).join(' · ')}
+                      {[t.accountLabel, t.cardLast4 ? `cartão •••• ${t.cardLast4}` : null, t.occurredAt ? formatTime(t.occurredAt) : null].filter(Boolean).join(' · ')}
                     </span>
                   </span>
                   <Money cents={t.amountCents} sign className={`am${t.amountCents > 0 ? ' in' : ''}`} />

@@ -1,5 +1,5 @@
 import type { Account, Transaction } from 'pluggy-sdk'
-import { toLocalDate } from '@/lib/format/date'
+import { isDateOnly, transactionDate } from '@/lib/format/date'
 
 export interface AccountRow {
   userId: string
@@ -23,6 +23,8 @@ export interface TransactionRow {
   externalId: string
   source: 'pluggy'
   date: string
+  /** Instante do lançamento quando a Pluggy informa hora; nulo para lançamentos só com data. */
+  occurredAt: string | null
   amountCents: number
   descriptionRaw: string
   pluggyCategory: string | null
@@ -81,7 +83,8 @@ export function mapTransaction(
     accountId: ctx.accountRowId,
     externalId: t.id,
     source: 'pluggy',
-    date: toLocalDate(t.date),
+    date: transactionDate(t.date),
+    occurredAt: isDateOnly(t.date) ? null : new Date(t.date).toISOString(),
     amountCents: amountCents === 0 ? 0 : amountCents,
     descriptionRaw: t.descriptionRaw ?? t.description,
     pluggyCategory: t.category ?? null,
