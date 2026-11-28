@@ -48,8 +48,11 @@ export async function classifyWindow(repo: SyncRepo, userId: string, w: Classify
   for (const d of result.decisions) {
     const cur = byId.get(d.id)
     if (!cur || cur.classifiedBy !== 'auto') continue
-    const categoryId = d.categoryId ?? (d.categoryName ? categoryByName.get(normalizeText(d.categoryName)) : undefined) ?? null
-    const merchantId = d.merchantId ?? null
+    // Sem regra que defina merchant/categoria, o que já está na linha fica (ex.: copiado do Atalho na
+    // fusão). A categoria da Pluggy só preenche quando a linha ainda não tem categoria.
+    const fromPluggy = d.categoryName ? categoryByName.get(normalizeText(d.categoryName)) : undefined
+    const categoryId = d.categoryId ?? cur.categoryId ?? fromPluggy ?? null
+    const merchantId = d.merchantId ?? cur.merchantId ?? null
     if (cur.kind === d.kind && cur.categoryId === categoryId && cur.merchantId === merchantId) continue
     decisions.push({ id: d.id, kind: d.kind as Kind, categoryId, merchantId })
   }

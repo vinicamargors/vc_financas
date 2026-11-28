@@ -12,14 +12,15 @@ export type SpendRow = { kind: string | null; amountCents: number }
 /**
  * Gasto real = despesas menos estornos (centavos positivos). Transferência, fatura, aporte, resgate,
  * rendimento, entrada, `pending_review` e `kind` nulo ficam fora. `pendingCents` é o valor absoluto
- * das saídas (negativas) que ainda estão "a confirmar", mostrado ao lado e nunca somado ao gasto.
+ * das saídas (negativas) ainda "a confirmar" (`pending_review` ou sem `kind`), mostrado ao lado e
+ * nunca somado ao gasto.
  */
 export function realSpending(rows: SpendRow[]): { spendingCents: number; pendingCents: number } {
   let net = 0
   let pending = 0
   for (const r of rows) {
     if (r.kind === 'expense' || r.kind === 'refund') net += r.amountCents
-    else if (r.kind === 'pending_review' && r.amountCents < 0) pending += -r.amountCents
+    else if ((r.kind === 'pending_review' || r.kind === null) && r.amountCents < 0) pending += -r.amountCents
   }
   return { spendingCents: 0 - net, pendingCents: pending }
 }

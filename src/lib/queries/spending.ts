@@ -10,7 +10,7 @@ export async function loadRealSpending(): Promise<{ spendingCents: number; pendi
     const { data, error } = await supabase
       .from('transactions')
       .select('kind, amount_cents')
-      .in('kind', ['expense', 'refund', 'pending_review'])
+      .or('kind.in.(expense,refund,pending_review),kind.is.null')
       .is('deleted_at', null)
       .gte('date', recentWindowStart(today))
       .lte('date', today)

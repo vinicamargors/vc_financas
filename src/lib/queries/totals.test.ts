@@ -18,13 +18,16 @@ describe('realSpending', () => {
       r(null, -777),
       r('expense', -1000),
     ]
-    expect(realSpending(rows)).toEqual({ spendingCents: 1000, pendingCents: 0 })
+    expect(realSpending(rows)).toEqual({ spendingCents: 1000, pendingCents: 777 })
   })
   it('a confirmar soma só saídas (negativas), em valor absoluto, fora do gasto', () => {
     expect(realSpending([r('expense', -1000), r('pending_review', -4000), r('pending_review', 500)])).toEqual({
       spendingCents: 1000,
       pendingCents: 4000,
     })
+  })
+  it('sem tipo (kind nulo) e saída conta como a confirmar, nunca como gasto', () => {
+    expect(realSpending([r(null, -300), r(null, 200), r('expense', -100)])).toEqual({ spendingCents: 100, pendingCents: 300 })
   })
   it('vazio', () => expect(realSpending([])).toEqual({ spendingCents: 0, pendingCents: 0 }))
 })

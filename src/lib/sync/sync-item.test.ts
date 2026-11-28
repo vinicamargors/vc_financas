@@ -228,3 +228,22 @@ describe('fusão com o Atalho', () => {
     expect(d.find((t) => t.id === s2)?.deletedAt).toBeNull()
   })
 })
+
+describe('fusão + classificação', () => {
+  it('classificador preserva merchant/categoria copiados de atalho automático; segunda sync idempotente', async () => {
+    const card = makeAccount({ id: 'card-1', type: 'CREDIT' as Account['type'], subtype: 'CREDIT_CARD' as Account['subtype'], name: 'Cartão' })
+    const repo = createMemoryRepo()
+    repo.seed({ categories: [{ id: 'c-ali', userId: U, name: 'Alimentação' }], merchants: [{ id: 'm-pad', userId: U, categoryId: 'c-ali' }] })
+    const s1 = repo.insertShortcut({ userId: U, accountId: 'man', date: '2026-11-27', amountCents: -900, descriptionRaw: 'Padaria' })
+    repo.patch(s1, { merchantId: 'm-pad', categoryId: 'c-ali', kind: 'expense' })
+    const tx = makeTransaction({ id: 'p1', type: 'DEBIT', amount: 9, description: 'PAG*XYZ 123', category: 'Shopping', date: new Date('2026-11-27T00:00:00Z') } as Partial<Transaction>)
+    const { source } = fakeSource({ accounts: [card], txs: [tx] })
+    await syncItem({ source, repo, today, now }, U, ITEM)
+    const p1 = () => repo.dump().transactions.find((t) => t.externalId === 'p1')!
+    expect(p1()).toMatchObject({ classifiedBy: 'auto', kind: 'expense', merchantId: 'm-pad', categoryId: 'c-ali' })
+    const before = repo.calls.applyClassification.length
+    await syncItem({ source, repo, today, now }, U, ITEM)
+    expect(p1()).toMatchObject({ merchantId: 'm-pad', categoryId: 'c-ali' })
+    expect(repo.calls.applyClassification.length).toBe(before)
+  })
+})
