@@ -45,29 +45,27 @@ create table if not exists public.shortcut_tokens (
 create index if not exists merchants_category_idx on public.merchants (category_id);
 create index if not exists rules_user_idx on public.rules (user_id);
 
--- transactions: backfill de kind ANTES do check (valores existentes: NULL ou 'savings_yield')
-update public.transactions
-   set kind = case when amount_cents < 0 then 'expense' else 'income' end
- where kind is null;
-
+-- transactions: kind continua nullable (NULL passa no check; o classificador trata as linhas existentes)
 alter table public.transactions
   add column if not exists classified_by text default 'auto';
+update public.transactions set classified_by = 'auto' where classified_by is null;
+alter table public.transactions alter column classified_by set not null;
 
 do $$ begin
-  if not exists (select 1 from pg_constraint where conname = 'transactions_kind_check') then
+  if not exists (select 1 from pg_constraint where conname = 'transactions_kind_check' and conrelid = 'public.transactions'::regclass) then
     alter table public.transactions add constraint transactions_kind_check
       check (kind in ('expense','income','transfer','card_payment','investment_in','investment_out','savings_yield','refund','pending_review'));
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'transactions_classified_by_check') then
+  if not exists (select 1 from pg_constraint where conname = 'transactions_classified_by_check' and conrelid = 'public.transactions'::regclass) then
     alter table public.transactions add constraint transactions_classified_by_check
       check (classified_by in ('auto','user'));
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'transactions_category_fk') then
+  if not exists (select 1 from pg_constraint where conname = 'transactions_category_fk' and conrelid = 'public.transactions'::regclass) then
     alter table public.transactions add constraint transactions_category_fk
       foreign key (category_id, user_id) references public.categories (id, user_id)
       match simple on delete set null (category_id);
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'transactions_merchant_fk') then
+  if not exists (select 1 from pg_constraint where conname = 'transactions_merchant_fk' and conrelid = 'public.transactions'::regclass) then
     alter table public.transactions add constraint transactions_merchant_fk
       foreign key (merchant_id, user_id) references public.merchants (id, user_id)
       match simple on delete set null (merchant_id);
