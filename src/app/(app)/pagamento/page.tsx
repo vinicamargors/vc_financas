@@ -84,6 +84,17 @@ export default async function PagamentoPage() {
             ))}
           </ul>
         )}
+        {free.savedCents > 0 && (
+          <ul className="pay-list">
+            <li className="pay-row done">
+              <span className="pay-mark" aria-hidden="true">
+                ✓
+              </span>
+              <span className="pay-name">Guardado em caixinhas</span>
+              <Money cents={free.savedCents} className="pay-val" />
+            </li>
+          </ul>
+        )}
       </section>
 
       <section className="pay-free" aria-labelledby="livre-titulo">

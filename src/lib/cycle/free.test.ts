@@ -127,4 +127,34 @@ describe('computeFree', () => {
     expect(r).toMatchObject({ daysLeft: 1, freePerDayCents: 1001 })
     expect(computeFree({ ...base, salaryCents: 1001 }).freePerDayCents).toBe(100)
   })
+
+  it('aporte em caixinha (investment_in no banco) sai do livre e aparece em savedCents; resgate e rendimento nunca somam', () => {
+    const txs = [
+      tx({ amountCents: -150_000, kind: 'investment_in', descriptionRaw: 'APLICACAO CAIXINHA' }),
+      tx({ amountCents: -50_000, kind: 'investment_in', accountType: 'CREDIT' }), // só banco
+      tx({ amountCents: 80_000, kind: 'investment_out' }),
+      tx({ amountCents: 900, kind: 'savings_yield' }),
+      tx({ amountCents: -20_000, kind: 'investment_in', date: '2026-11-26' }), // ciclo anterior
+    ]
+    const r = computeFree({ ...base, txs })
+    expect(r.savedCents).toBe(150_000)
+    expect(r.freeCents).toBe(850_000)
+  })
+
+  it('compromisso fixo casa o aporte pelo texto: reserva o maior entre esperado e pago, sem contar de novo', () => {
+    const casa = c({ name: 'Casa', amountCents: 150_000, matchCounterparty: 'caixinha casa' })
+    const txs = [tx({ amountCents: -150_000, kind: 'investment_in', descriptionRaw: 'Aplicacao Caixinha Casa' })]
+    const r = computeFree({ ...base, commitments: [casa], txs })
+    expect(r.commitments[0]).toMatchObject({ expectedCents: 150_000, paidCents: 150_000, status: 'done' })
+    expect(r.savedCents).toBe(0)
+    expect(r.freeCents).toBe(850_000)
+    // aporte maior que o esperado: o excesso do pago também sai
+    const r2 = computeFree({ ...base, commitments: [casa], txs: [tx({ amountCents: -200_000, kind: 'investment_in', descriptionRaw: 'Aplicacao Caixinha Casa' })] })
+    expect(r2.freeCents).toBe(800_000)
+    // outro aporte que não casa continua saindo como guardado
+    const r3 = computeFree({ ...base, commitments: [casa], txs: [...txs, tx({ amountCents: -30_000, kind: 'investment_in', descriptionRaw: 'Aplicacao Viagem' })] })
+    expect(r3.savedCents).toBe(30_000)
+    expect(r3.freeCents).toBe(820_000)
+  })
 })
+

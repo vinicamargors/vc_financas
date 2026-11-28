@@ -49,6 +49,8 @@ export type FreeResult = {
   daysLeft: number
   commitments: CommitmentResult[]
   cardThisCycleCents: number
+  /** Aportes em caixinha do ciclo que nenhum compromisso cobre: saem do livre. */
+  savedCents: number
   /** Renda extra marcada para somar ao livre. */
   extrasCountedCents: number
 }
@@ -58,6 +60,11 @@ export const CARD_COMMITMENT_ID = 'card'
 /** Saída de caixa: no banco, valor negativo, despesa ou ainda a confirmar. */
 function isCashOut(t: FreeTx): boolean {
   return t.accountType === 'BANK' && t.amountCents < 0 && (t.kind === 'expense' || t.kind === 'pending_review' || t.kind === null)
+}
+
+/** Aporte em caixinha/investimento: dinheiro que saiu da conta e continua seu, mas não está mais livre. */
+function isInvestOut(t: FreeTx): boolean {
+  return t.accountType === 'BANK' && t.amountCents < 0 && t.kind === 'investment_in'
 }
 
 /** Entrada no banco marcada para somar ao livre. */
@@ -78,7 +85,7 @@ function status(expected: number, paid: number): CommitmentStatus {
 /**
  * Livre do ciclo (dinheiro em caixa): salário + extras marcados − Σ max(esperado, pago) dos compromissos
  * (fatura inclusa) − saídas no banco que não casaram com nenhum compromisso. Compra no cartão não
- * entra (só informa `cardThisCycleCents`); transferência, aporte, resgate e rendimento ficam fora.
+ * entra (só informa `cardThisCycleCents`); transferência, resgate e rendimento ficam fora. Aporte em caixinha sai do livre (casado a um compromisso, conta nele).
  */
 export function computeFree(input: FreeInput): FreeResult {
   const { cycle, today, salaryCents } = input
@@ -93,7 +100,7 @@ export function computeFree(input: FreeInput): FreeResult {
     if (!p) return 0
     let paid = 0
     for (const t of txs) {
-      if (matched.has(t.id) || !isCashOut(t) || !text(t).some((x) => x.includes(p))) continue
+      if (matched.has(t.id) || !(isCashOut(t) || isInvestOut(t)) || !text(t).some((x) => x.includes(p))) continue
       matched.add(t.id)
       paid += -t.amountCents
     }
@@ -144,16 +151,18 @@ export function computeFree(input: FreeInput): FreeResult {
   }
 
   let outside = 0
+  let savedCents = 0
   let cardThisCycleCents = 0
   for (const t of txs) {
     if (t.accountType === 'CREDIT') {
       if (t.kind === 'expense' || t.kind === 'refund') cardThisCycleCents -= t.amountCents
     } else if (!matched.has(t.id) && isCashOut(t) && !looksLikeCardPayment(t)) outside -= t.amountCents
+    else if (!matched.has(t.id) && isInvestOut(t)) savedCents -= t.amountCents
   }
 
   const reserved = reserves.reduce((s, r) => s + r, 0)
-  const freeCents = salaryCents + extrasCents - reserved - outside
+  const freeCents = salaryCents + extrasCents - reserved - outside - savedCents
   const daysLeft = Math.max(1, daysBetween(today, cycle.end) + 1)
   const freePerDayCents = freeCents > 0 ? Math.floor(freeCents / daysLeft) : 0
-  return { freeCents, freePerDayCents, daysLeft, commitments, cardThisCycleCents, extrasCountedCents: extrasCents }
+  return { freeCents, freePerDayCents, daysLeft, commitments, cardThisCycleCents, savedCents, extrasCountedCents: extrasCents }
 }
