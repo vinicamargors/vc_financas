@@ -40,4 +40,10 @@ describe('matchShortcuts', () => {
     const r = matchShortcuts([sc({ id: 's1' }), sc({ id: 's2' })], [px({ id: 'p1' }), px({ id: 'p2', date: '2026-11-28' })], new Set())
     expect(pairs(r)).toEqual([['s1', 'p1'], ['s2', 'p2']])
   })
+
+  it('linha num cartão só casa com o mesmo cartão; só a conta Atalho casa com qualquer cartão', () => {
+    expect(matchShortcuts([sc({ accountId: 'card-a', anyAccount: false })], [px({ accountId: 'card-b' })], new Set())).toHaveLength(0)
+    expect(matchShortcuts([sc({ accountId: 'card-a', anyAccount: false })], [px({ accountId: 'card-a' })], new Set())).toHaveLength(1)
+    expect(matchShortcuts([sc({ anyAccount: true })], [px({ accountId: 'card-b' })], new Set())).toHaveLength(1)
+  })
 })

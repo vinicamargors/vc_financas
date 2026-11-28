@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ClassifyTx, IncomeSourceMatch, Kind, Rule } from '@/lib/classify/classify'
 import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
 import { minusDays } from './classification'
+import { mergePatch, type ManualRow, type ReconcileCandidate } from '@/lib/reconcile/reconcile'
+import { BENEFIT_PAYMENT_METHOD } from '@/lib/shortcut/ingest'
 import type { MergeCandidate, ShortcutMatch, ShortcutRow } from '@/lib/shortcut/merge'
 
 /** Espelha as colunas de `connections` (camelCase). */
@@ -85,9 +87,18 @@ export interface SyncRepo {
    * e apaga o atalho (soft delete) com `linked_transaction_id` apontando para a da Pluggy.
    */
   applyShortcutMerges(userId: string, matches: ShortcutMatch[]): Promise<void>
+  /**
+   * Conferência do lançamento manual, na janela `[from, to]`: manuais vivos, sem par, não conferidos e fora do VR;
+   * lançamentos da Pluggy de mesmo sinal na janela (±1 dia); e ids da Pluggy já ligados a um atalho/manual.
+   */
+  loadManualReconcile(userId: string, from: string, to: string): Promise<{ manuals: ManualRow[]; candidates: ReconcileCandidate[]; taken: string[] }>
+  /** Grava a dúvida (`reconcile_candidate_id`) em manuais vivos e não conferidos do usuário. */
+  setReconcileCandidates(userId: string, doubts: { manualId: string; candidateId: string | null }[]): Promise<void>
 }
 
 const CHUNK = 500
+/** Linhas provisórias que a Pluggy substitui ao chegar: Atalho e lançamento manual. */
+const MERGEABLE_SOURCES = ['shortcut', 'manual']
 
 /** `external_id` da conta MANUAL criada pelo Atalho do iPhone. */
 export const SHORTCUT_ACCOUNT_EXTERNAL_ID = 'atalho'
@@ -97,6 +108,8 @@ export const SHORTCUT_ACCOUNT_EXTERNAL_ID = 'atalho'
  * compra nunca vira par de transferência). Outras contas seguem como estão.
  */
 export function classifierAccountType(type: string, externalId: string | null): 'BANK' | 'CREDIT' {
+  // VR (BENEFIT) se comporta como cartão: compra não é transferência e não pareia com o banco.
+  if (type === 'BENEFIT') return 'CREDIT'
   return (type === 'MANUAL' && externalId === SHORTCUT_ACCOUNT_EXTERNAL_ID ? 'CREDIT' : type) as 'BANK' | 'CREDIT'
 }
 
@@ -460,7 +473,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
     async loadShortcutMerge(userId, from, to) {
       const lo = minusDays(from, 1)
       const hi = minusDays(to, -1)
-      const [shortcuts, credit] = await Promise.all([
+      const [shortcuts, accs] = await Promise.all([
         admin
           .from('transactions')
           .select('id, account_id, date, amount_cents, created_at, merchant_id, category_id, kind, classified_by')
@@ -468,14 +481,22 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
           .eq('source', 'shortcut')
           .is('deleted_at', null)
           .is('linked_transaction_id', null)
+          // Compra com cartão de benefício nunca vira linha de fatura.
+          .or(`payment_method.is.null,payment_method.neq.${BENEFIT_PAYMENT_METHOD}`)
           .gte('date', from)
           .lte('date', to)
           .limit(PAGE),
-        admin.from('accounts').select('id').eq('user_id', userId).eq('type', 'CREDIT'),
+        admin.from('accounts').select('id, type, external_id').eq('user_id', userId),
       ])
-      for (const r of [shortcuts, credit]) if (r.error) throw r.error
-      const scRows = shortcuts.data ?? []
-      const creditIds = (credit.data ?? []).map((a) => a.id as string)
+      for (const r of [shortcuts, accs]) if (r.error) throw r.error
+      const accType = new Map((accs.data ?? []).map((a) => [a.id as string, a]))
+      const isAtalho = (id: string) => {
+        const a = accType.get(id)
+        return a?.type === 'MANUAL' && a.external_id === SHORTCUT_ACCOUNT_EXTERNAL_ID
+      }
+      // Atalho no VR (BENEFIT) não tem fatura: fica fora da fusão.
+      const scRows = (shortcuts.data ?? []).filter((s) => accType.get(s.account_id as string)?.type !== 'BENEFIT')
+      const creditIds = (accs.data ?? []).filter((a) => a.type === 'CREDIT').map((a) => a.id as string)
       let candidates: MergeCandidate[] = []
       const taken: string[] = []
       if (scRows.length && creditIds.length) {
@@ -505,7 +526,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
             .from('transactions')
             .select('linked_transaction_id')
             .eq('user_id', userId)
-            .eq('source', 'shortcut')
+            .in('source', MERGEABLE_SOURCES)
             .in('linked_transaction_id', part)
           if (mErr) throw mErr
           taken.push(...(merged ?? []).map((m) => m.linked_transaction_id as string))
@@ -522,6 +543,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
           categoryId: (s.category_id as string | null) ?? null,
           kind: (s.kind as Kind | null) ?? null,
           classifiedBy: s.classified_by as 'auto' | 'user',
+          anyAccount: isAtalho(s.account_id as string),
         })),
         candidates,
         taken,
@@ -536,23 +558,111 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
           .update({ deleted_at: new Date().toISOString(), linked_transaction_id: pluggyId })
           .eq('user_id', userId)
           .eq('id', s.id)
-          .eq('source', 'shortcut')
+          .in('source', MERGEABLE_SOURCES)
           .is('deleted_at', null)
           .is('linked_transaction_id', null)
           .select('id')
         if (delErr) throw delErr
         if ((gone ?? []).length !== 1) continue
-        if (s.merchantId === null && s.categoryId === null) continue
-        const patch =
-          s.classifiedBy === 'user'
-            ? { merchant_id: s.merchantId, category_id: s.categoryId, kind: s.kind, classified_by: 'user' }
-            : { merchant_id: s.merchantId, category_id: s.categoryId }
+        const patch = mergePatch(s)
+        if (!patch) continue
         const { error } = await admin
           .from('transactions')
           .update(patch)
           .eq('user_id', userId)
           .eq('id', pluggyId)
           .eq('classified_by', 'auto')
+        if (error) throw error
+      }
+    },
+    async loadManualReconcile(userId, from, to) {
+      const { data: accs, error: aErr } = await admin.from('accounts').select('id, type, connection_id').eq('user_id', userId)
+      if (aErr) throw aErr
+      const bankKey = new Map((accs ?? []).map((a) => [a.id as string, (a.connection_id as string | null) ?? null]))
+      const eligible = (accs ?? []).filter((a) => a.type === 'BANK' || a.type === 'CREDIT').map((a) => a.id as string)
+      if (eligible.length === 0) return { manuals: [], candidates: [], taken: [] }
+      const { data: mRows, error: mErr } = await admin
+        .from('transactions')
+        .select('id, account_id, date, amount_cents, created_at, occurred_at, description_raw, merchant_id, category_id, kind, classified_by, reconcile_candidate_id')
+        .eq('user_id', userId)
+        .eq('source', 'manual')
+        .eq('reconciled', false)
+        .is('deleted_at', null)
+        .is('linked_transaction_id', null)
+        .in('account_id', eligible)
+        .gte('date', from)
+        .lte('date', to)
+        .limit(PAGE)
+      if (mErr) throw mErr
+      const manuals: ManualRow[] = (mRows ?? []).map((s) => ({
+        id: s.id as string,
+        accountId: s.account_id as string,
+        bankKey: bankKey.get(s.account_id as string) ?? null,
+        date: s.date as string,
+        amountCents: Number(s.amount_cents),
+        createdAt: s.created_at as string,
+        occurredAt: (s.occurred_at as string | null) ?? null,
+        description: (s.description_raw as string) ?? '',
+        merchantId: (s.merchant_id as string | null) ?? null,
+        categoryId: (s.category_id as string | null) ?? null,
+        kind: (s.kind as Kind | null) ?? null,
+        classifiedBy: s.classified_by as 'auto' | 'user',
+        reconcileCandidateId: (s.reconcile_candidate_id as string | null) ?? null,
+      }))
+      if (manuals.length === 0) return { manuals, candidates: [], taken: [] }
+      const lowCents = Math.floor(Math.min(...manuals.map((m) => m.amountCents - Math.abs(m.amountCents) * 0.05)))
+      const highCents = Math.ceil(Math.max(...manuals.map((m) => m.amountCents + Math.abs(m.amountCents) * 0.05)))
+      const { data: cRows, error: cErr } = await admin
+        .from('transactions')
+        .select('id, account_id, date, amount_cents, created_at, occurred_at, description_raw')
+        .eq('user_id', userId)
+        .eq('source', 'pluggy')
+        .is('deleted_at', null)
+        .in('account_id', eligible)
+        .gte('amount_cents', lowCents)
+        .lte('amount_cents', highCents)
+        .gte('date', minusDays(from, 1))
+        .lte('date', minusDays(to, -1))
+        .order('date', { ascending: false })
+        .limit(PAGE)
+      if (cErr) throw cErr
+      const amounts = manuals.map((m) => Math.abs(m.amountCents))
+      const candidates: ReconcileCandidate[] = (cRows ?? [])
+        .filter((c) => amounts.some((a) => Math.abs(Math.abs(Number(c.amount_cents)) - a) <= a * 0.05))
+        .map((c) => ({
+          id: c.id as string,
+          accountId: c.account_id as string,
+          bankKey: bankKey.get(c.account_id as string) ?? null,
+          date: c.date as string,
+          amountCents: Number(c.amount_cents),
+          createdAt: c.created_at as string,
+          occurredAt: (c.occurred_at as string | null) ?? null,
+          description: (c.description_raw as string) ?? '',
+        }))
+      const taken: string[] = []
+      for (const part of chunks(candidates.map((c) => c.id), ID_CHUNK)) {
+        const { data, error } = await admin
+          .from('transactions')
+          .select('linked_transaction_id')
+          .eq('user_id', userId)
+          .in('source', MERGEABLE_SOURCES)
+          .in('linked_transaction_id', part)
+        if (error) throw error
+        taken.push(...(data ?? []).map((m) => m.linked_transaction_id as string))
+      }
+      return { manuals, candidates, taken }
+    },
+
+    async setReconcileCandidates(userId, doubts) {
+      for (const d of doubts) {
+        const { error } = await admin
+          .from('transactions')
+          .update({ reconcile_candidate_id: d.candidateId })
+          .eq('user_id', userId)
+          .eq('id', d.manualId)
+          .eq('source', 'manual')
+          .eq('reconciled', false)
+          .is('deleted_at', null)
         if (error) throw error
       }
     },

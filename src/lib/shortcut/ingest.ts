@@ -1,8 +1,11 @@
+import { isBenefitCard } from '@/lib/benefit/benefit'
 import { toLocalDate } from '@/lib/format/date'
 import { parseAmountCents } from './amount'
 import { hashToken } from './token'
 
 export const RATE_LIMIT_PER_HOUR = 60
+/** Marca a compra feita com cartão de benefício (VR/VA). */
+export const BENEFIT_PAYMENT_METHOD = 'BENEFIT'
 const MERCHANT_MAX = 120
 const CARD_MAX = 60
 
@@ -13,6 +16,8 @@ export interface ShortcutInsert {
   occurredAt: string
   amountCents: number
   descriptionRaw: string
+  /** `BENEFIT` quando o cartão é de benefício: a linha nunca é fundida com a fatura de um cartão. */
+  paymentMethod?: string | null
 }
 
 /** Acesso a dados do endpoint. Toda função recebe o `userId` do dono do token e filtra por ele. */
@@ -21,6 +26,8 @@ export interface IngestRepo {
   /** Lançamentos do Atalho com `occurred_at >= since` (inclui os já fundidos). */
   countShortcutsSince(userId: string, sinceIso: string): Promise<number>
   listCreditAccounts(userId: string): Promise<{ id: string; name: string; institution: string }[]>
+  /** Conta VR (BENEFIT) do usuário, se houver. */
+  findBenefitAccount(userId: string): Promise<string | null>
   /** Conta MANUAL "Atalho", criada na primeira vez. */
   ensureManualAccount(userId: string): Promise<string>
   insertTransaction(row: ShortcutInsert): Promise<void>
@@ -87,9 +94,20 @@ export async function ingestShortcut(
   const recent = await repo.countShortcutsSince(userId, new Date(at.getTime() - 3_600_000).toISOString())
   if (recent >= RATE_LIMIT_PER_HOUR) return fail(429, 'Limite de 60 lançamentos por hora atingido.')
 
-  const accountId = pickAccount(await repo.listCreditAccounts(userId), cardHint || null) ?? (await repo.ensureManualAccount(userId))
+  const benefitCard = isBenefitCard(cardHint)
+  const benefitId = benefitCard ? await repo.findBenefitAccount(userId) : null
+  const accountId =
+    benefitId ?? pickAccount(await repo.listCreditAccounts(userId), cardHint || null) ?? (await repo.ensureManualAccount(userId))
   const date = toLocalDate(at)
-  await repo.insertTransaction({ userId, accountId, date, occurredAt: at.toISOString(), amountCents: -cents, descriptionRaw: name })
+  await repo.insertTransaction({
+    userId,
+    accountId,
+    date,
+    occurredAt: at.toISOString(),
+    amountCents: -cents,
+    descriptionRaw: name,
+    ...(benefitCard ? { paymentMethod: BENEFIT_PAYMENT_METHOD } : {}),
+  })
   try {
     await repo.classify(userId, date)
   } catch {

@@ -247,3 +247,76 @@ describe('fusão + classificação', () => {
     expect(repo.calls.applyClassification.length).toBe(before)
   })
 })
+
+describe('conferência do lançamento manual', () => {
+  const card = makeAccount({ id: 'card-1', type: 'CREDIT' as Account['type'], subtype: 'CREDIT_CARD' as Account['subtype'], name: 'Cartão' })
+  const buy = (id: string, amount: number, date: string, description = 'PADARIA REAL*123') =>
+    makeTransaction({ id, type: 'DEBIT', amount, description, date: new Date(`${date}T00:00:00Z`) } as Partial<Transaction>)
+  const past = new Date(Date.now() - 86_400_000).toISOString()
+
+  async function setup(txs: Transaction[]) {
+    const repo = createMemoryRepo()
+    await syncItem({ source: fakeSource({ accounts: [card], txs: [] }).source, repo, today, now }, U, ITEM)
+    const accountId = repo.dump().accounts.find((a) => a.externalId === 'card-1')!.id
+    const m = repo.insertManual({ userId: U, accountId, date: '2026-11-27', amountCents: -4_590, descriptionRaw: 'Padaria Real', categoryId: 'c-ali', createdAt: past })
+    // outro usuário com o mesmo valor e a mesma conta "id" nunca é tocado nem usado
+    const other = repo.insertManual({ userId: 'user-2', accountId, date: '2026-11-27', amountCents: -4_590, descriptionRaw: 'Padaria Real', createdAt: past })
+    await syncItem({ source: fakeSource({ accounts: [card], txs }).source, repo, today, now }, U, ITEM)
+    return { repo, m, other }
+  }
+
+  it('certeza: funde, a linha da Pluggy fica com a classificação do usuário', async () => {
+    const { repo, m, other } = await setup([buy('p1', 45.9, '2026-11-27')])
+    const d = repo.dump().transactions
+    const p1 = d.find((t) => t.externalId === 'p1')!
+    expect(p1).toMatchObject({ categoryId: 'c-ali', kind: 'expense', classifiedBy: 'user' })
+    expect(d.find((t) => t.id === m)).toMatchObject({ linkedTransactionId: p1.id })
+    expect(d.find((t) => t.id === m)?.deletedAt).not.toBeNull()
+    expect(d.find((t) => t.id === other)).toMatchObject({ deletedAt: null, linkedTransactionId: null, reconcileCandidateId: null })
+  })
+
+  it('dúvida: dois candidatos → grava o candidato e não apaga', async () => {
+    const { repo, m } = await setup([buy('p1', 45.9, '2026-11-27'), buy('p2', 45.9, '2026-11-28', 'OUTRA')])
+    const d = repo.dump().transactions
+    expect(d.find((t) => t.id === m)).toMatchObject({ deletedAt: null, reconcileCandidateId: d.find((t) => t.externalId === 'p1')!.id })
+  })
+
+  it('sem par: o manual continua contando, sem candidato', async () => {
+    const { repo, m } = await setup([buy('p1', 12, '2026-11-27')])
+    expect(repo.dump().transactions.find((t) => t.id === m)).toMatchObject({ deletedAt: null, reconcileCandidateId: null })
+  })
+})
+
+describe('fusão: revisão', () => {
+  const card = makeAccount({ id: 'card-1', type: 'CREDIT' as Account['type'], subtype: 'CREDIT_CARD' as Account['subtype'], name: 'Cartão' })
+  const buy = (id: string, amount: number, date: string, description = 'PADARIA REAL*123') =>
+    makeTransaction({ id, type: 'DEBIT', amount, description, date: new Date(`${date}T00:00:00Z`) } as Partial<Transaction>)
+
+  it('atalho no VR ou marcado como benefício nunca funde com o cartão', async () => {
+    const repo = createMemoryRepo()
+    const [vr] = await repo.upsertAccounts([
+      { userId: U, connectionId: null as unknown as string, externalId: 'vr', type: 'BENEFIT' as unknown as 'BANK', subtype: null, name: 'VR', institution: 'VR', balanceCents: 0, creditLimitCents: null, closingDay: null, dueDay: null },
+    ])
+    const onVr = repo.insertShortcut({ userId: U, accountId: vr.id, date: '2026-11-27', amountCents: -900, descriptionRaw: 'Padaria' })
+    const flagged = repo.insertShortcut({ userId: U, accountId: 'man', date: '2026-11-27', amountCents: -900, descriptionRaw: 'Padaria' })
+    repo.patch(flagged, { paymentMethod: 'BENEFIT' })
+    await syncItem({ source: fakeSource({ accounts: [card], txs: [buy('p1', 9, '2026-11-27')] }).source, repo, today, now }, U, ITEM)
+    const d = repo.dump().transactions
+    expect(d.find((t) => t.id === onVr)?.deletedAt).toBeNull()
+    expect(d.find((t) => t.id === flagged)?.deletedAt).toBeNull()
+  })
+
+  it('copia só o que foi preenchido: sem categoria, a linha da Pluggy fica auto e mantém a categoria dela', async () => {
+    const repo = createMemoryRepo()
+    await syncItem({ source: fakeSource({ accounts: [card], txs: [buy('p1', 45.9, '2026-11-27')] }).source, repo, today, now }, U, ITEM)
+    const p1 = repo.dump().transactions.find((t) => t.externalId === 'p1')!
+    repo.patch(p1.id, { categoryId: 'c-auto', createdAt: new Date(Date.now() + 3_600_000).toISOString() })
+    const accountId = repo.dump().accounts.find((a) => a.externalId === 'card-1')!.id
+    const m = repo.insertManual({ userId: U, accountId, date: '2026-11-27', amountCents: -4_590, descriptionRaw: 'Padaria Real', createdAt: new Date().toISOString() })
+    await syncItem({ source: fakeSource({ accounts: [card], txs: [buy('p1', 45.9, '2026-11-27')] }).source, repo, today, now }, U, ITEM)
+    const d = repo.dump().transactions
+    expect(d.find((t) => t.id === m)?.deletedAt).not.toBeNull()
+    expect(d.find((t) => t.id === p1.id)).toMatchObject({ categoryId: 'c-auto', kind: 'expense', classifiedBy: 'auto' })
+  })
+})
+

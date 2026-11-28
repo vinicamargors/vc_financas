@@ -166,4 +166,8 @@ describe('classifierAccountType', () => {
     expect(classifierAccountType('MANUAL', 'outra')).toBe('MANUAL')
     expect(classifierAccountType('BANK', 'atalho')).toBe('BANK')
   })
+  it('VR (BENEFIT) é tratado como cartão: compras não viram transferência', async () => {
+    const { classifierAccountType } = await import('./repo')
+    expect(classifierAccountType('BENEFIT', 'vr:x')).toBe('CREDIT')
+  })
 })

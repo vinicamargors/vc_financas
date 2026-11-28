@@ -1,6 +1,7 @@
 import type { IncomeSourceMatch, Kind, Rule } from '@/lib/classify/classify'
 import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
 import type { ClassificationChanges, ConnectionRow, SyncRepo } from './repo'
+import { mergePatch, type ManualRow, type ReconcileCandidate } from '@/lib/reconcile/reconcile'
 
 import { dayDistance } from './classification'
 import { classifierAccountType } from './repo'
@@ -16,6 +17,8 @@ export type StoredTransaction = Omit<TransactionRow, 'kind'> & {
   incomeSourceId?: string | null
   linkedTransactionId: string | null
   createdAt: string
+  reconcileCandidateId?: string | null
+  reconciled?: boolean
 }
 export interface MemoryProfile {
   cpf: string | null
@@ -50,6 +53,17 @@ export function createMemoryRepo(): SyncRepo & {
   patch(id: string, p: Partial<StoredTransaction>): void
   /** Grava uma linha do Atalho (sem external_id) e devolve o id. */
   insertShortcut(r: { userId: string; accountId: string; date: string; amountCents: number; descriptionRaw: string }): string
+  /** Grava um lançamento manual (classificado pelo usuário) e devolve o id. */
+  insertManual(r: {
+    userId: string
+    accountId: string
+    date: string
+    amountCents: number
+    descriptionRaw: string
+    occurredAt?: string | null
+    categoryId?: string | null
+    createdAt?: string
+  }): string
   /** Remove só a fonte (as linhas ficam com o id velho, para testar que a reclassificação limpa). */
   removeIncomeSource(id: string): void
   calls: { applyClassification: ClassificationChanges[] }
@@ -205,17 +219,29 @@ export function createMemoryRepo(): SyncRepo & {
     },
     async loadShortcutMerge(userId, from, to) {
       const live = [...transactions.values()].filter((t) => t.userId === userId && !t.deletedAt)
-      const shortcuts = live.filter((t) => (t.source as string) === 'shortcut' && !t.linkedTransactionId && t.date >= from && t.date <= to)
-      const credit = new Set([...accounts.values()].filter((a) => a.userId === userId && a.type === 'CREDIT').map((a) => a.id))
+      const userAccs = [...accounts.values()].filter((a) => a.userId === userId)
+      const credit = new Set(userAccs.filter((a) => a.type === 'CREDIT').map((a) => a.id))
+      const benefit = new Set(userAccs.filter((a) => (a.type as string) === 'BENEFIT').map((a) => a.id))
+      const shortcuts = live.filter(
+        (t) =>
+          (t.source as string) === 'shortcut' &&
+          !t.linkedTransactionId &&
+          t.paymentMethod !== 'BENEFIT' &&
+          !benefit.has(t.accountId) &&
+          t.date >= from &&
+          t.date <= to,
+      )
       const candidates = live.filter(
         (t) => t.source === 'pluggy' && credit.has(t.accountId) && shortcuts.some((s) => s.amountCents === t.amountCents && dayDistance(s.date, t.date) <= 1),
       )
       const taken = [...transactions.values()]
-        .filter((t) => t.userId === userId && (t.source as string) === 'shortcut' && t.linkedTransactionId)
+        .filter((t) => t.userId === userId && ['shortcut', 'manual'].includes(t.source as string) && t.linkedTransactionId)
         .map((t) => t.linkedTransactionId as string)
       return {
         shortcuts: shortcuts.map((t) => ({
           id: t.id, accountId: t.accountId, date: t.date, amountCents: t.amountCents, createdAt: t.createdAt, merchantId: t.merchantId, categoryId: t.categoryId, kind: t.kind ?? null, classifiedBy: t.classifiedBy,
+          // Nos testes, uma conta que não é cartão faz o papel da conta Atalho.
+          anyAccount: !credit.has(t.accountId),
         })),
         candidates: candidates.map((t) => ({ id: t.id, accountId: t.accountId, date: t.date, amountCents: t.amountCents, createdAt: t.createdAt })),
         taken,
@@ -224,15 +250,61 @@ export function createMemoryRepo(): SyncRepo & {
     async applyShortcutMerges(userId, matches) {
       for (const { shortcut: s, pluggyId } of matches) {
         const sc = txById(s.id)
-        if (!sc || sc.userId !== userId || (sc.source as string) !== 'shortcut' || sc.deletedAt || sc.linkedTransactionId) continue
+        if (!sc || sc.userId !== userId || !['shortcut', 'manual'].includes(sc.source as string) || sc.deletedAt || sc.linkedTransactionId) continue
         Object.assign(sc, { deletedAt: new Date().toISOString(), linkedTransactionId: pluggyId })
-        if (s.merchantId === null && s.categoryId === null) continue
+        const patch = mergePatch(s)
         const p = txById(pluggyId)
-        if (p && p.userId === userId && p.classifiedBy === 'auto') {
-          Object.assign(p, { merchantId: s.merchantId, categoryId: s.categoryId })
-          if (s.classifiedBy === 'user') Object.assign(p, { kind: s.kind, classifiedBy: 'user' })
+        if (patch && p && p.userId === userId && p.classifiedBy === 'auto') {
+          if (patch.merchant_id) p.merchantId = patch.merchant_id
+          if (patch.category_id) p.categoryId = patch.category_id
+          if (patch.kind) p.kind = patch.kind as Kind
+          if (patch.classified_by) p.classifiedBy = 'user'
         }
       }
+    },
+    async loadManualReconcile(userId, from, to) {
+      const accs = [...accounts.values()].filter((a) => a.userId === userId)
+      const bankKey = new Map(accs.map((a) => [a.id, a.connectionId ?? null]))
+      const eligible = new Set(accs.filter((a) => a.type === 'BANK' || a.type === 'CREDIT').map((a) => a.id))
+      const live = [...transactions.values()].filter((t) => t.userId === userId && !t.deletedAt && eligible.has(t.accountId))
+      const manuals: ManualRow[] = live
+        .filter((t) => (t.source as string) === 'manual' && !t.reconciled && !t.linkedTransactionId && t.date >= from && t.date <= to)
+        .map((t) => ({
+          id: t.id, accountId: t.accountId, bankKey: bankKey.get(t.accountId) ?? null, date: t.date, amountCents: t.amountCents,
+          createdAt: t.createdAt, occurredAt: t.occurredAt, description: t.descriptionRaw, merchantId: t.merchantId,
+          categoryId: t.categoryId, kind: t.kind ?? null, classifiedBy: t.classifiedBy, reconcileCandidateId: t.reconcileCandidateId ?? null,
+        }))
+      const candidates: ReconcileCandidate[] = live
+        .filter((t) => t.source === 'pluggy' && manuals.some((m) => dayDistance(m.date, t.date) <= 1))
+        .map((t) => ({
+          id: t.id, accountId: t.accountId, bankKey: bankKey.get(t.accountId) ?? null, date: t.date, amountCents: t.amountCents,
+          createdAt: t.createdAt, occurredAt: t.occurredAt, description: t.descriptionRaw,
+        }))
+      const taken = [...transactions.values()]
+        .filter((t) => t.userId === userId && ['shortcut', 'manual'].includes(t.source as string) && t.linkedTransactionId)
+        .map((t) => t.linkedTransactionId as string)
+      return { manuals, candidates, taken }
+    },
+    async setReconcileCandidates(userId, doubts) {
+      for (const d of doubts) {
+        const t = txById(d.manualId)
+        if (t && t.userId === userId && (t.source as string) === 'manual' && !t.reconciled && !t.deletedAt) t.reconcileCandidateId = d.candidateId
+      }
+    },
+    insertManual(r) {
+      const id = newId()
+      transactions.set(`manual:${id}`, {
+        userId: r.userId, accountId: r.accountId, date: r.date, amountCents: r.amountCents, descriptionRaw: r.descriptionRaw,
+        id,
+        externalId: null as unknown as string,
+        source: 'manual' as unknown as 'pluggy',
+        occurredAt: r.occurredAt ?? null, pluggyCategory: null, counterpartyName: null, counterpartyDoc: null, paymentMethod: null,
+        installmentNumber: null, installmentTotal: null, cardLast4: null, status: null, raw: null as unknown as StoredTransaction['raw'],
+        deletedAt: null, kind: r.amountCents < 0 ? 'expense' : 'income', classifiedBy: 'user', categoryId: r.categoryId ?? null, merchantId: null,
+        linkedTransactionId: null, reconcileCandidateId: null, reconciled: false,
+        createdAt: r.createdAt ?? new Date().toISOString(),
+      })
+      return id
     },
     insertShortcut(r) {
       const id = newId()

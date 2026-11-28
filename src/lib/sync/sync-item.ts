@@ -10,6 +10,7 @@ import {
 } from '@/lib/pluggy/map'
 import { toLocalDate } from '@/lib/format/date'
 import { onlyDigits } from '@/lib/classify/normalize'
+import { reconcileManuals } from '@/lib/reconcile/reconcile'
 import { matchShortcuts } from '@/lib/shortcut/merge'
 import { classifyWindow, minusDays } from './classification'
 import { safeErrorMessage } from './safe-error'
@@ -159,6 +160,11 @@ export async function syncItem(deps: SyncDeps, userId: string, itemId: string): 
     ;(deps.log ?? console.error)(`fusão com o Atalho falhou (item ${itemId}): ${safeErrorMessage(e)}`)
   }
   try {
+    await reconcileManualEntries(repo, userId, minusDays(from, OVERLAP_DAYS), today)
+  } catch (e) {
+    ;(deps.log ?? console.error)(`conferência dos lançamentos manuais falhou (item ${itemId}): ${safeErrorMessage(e)}`)
+  }
+  try {
     await repo.mergeOwnerIdentity(userId, ownerDocs, ownerNames)
     await classifyWindow(repo, userId, { from: minusDays(from, OVERLAP_DAYS), to: today, ownerDocs, ownerNames })
   } catch (e) {
@@ -180,6 +186,16 @@ export async function mergeShortcuts(repo: SyncRepo, userId: string, from: strin
   const matches = matchShortcuts(shortcuts, candidates, new Set(taken))
   if (matches.length) await repo.applyShortcutMerges(userId, matches)
   return matches.length
+}
+
+/** Lançamento manual: na certeza, a linha da Pluggy substitui o manual; na dúvida, fica o candidato para a Revisar. */
+export async function reconcileManualEntries(repo: SyncRepo, userId: string, from: string, to: string): Promise<{ merged: number; doubts: number }> {
+  const { manuals, candidates, taken } = await repo.loadManualReconcile(userId, from, to)
+  if (manuals.length === 0) return { merged: 0, doubts: 0 }
+  const { merges, doubts } = reconcileManuals(manuals, candidates, new Set(taken))
+  if (merges.length) await repo.applyShortcutMerges(userId, merges)
+  if (doubts.length) await repo.setReconcileCandidates(userId, doubts)
+  return { merged: merges.length, doubts: doubts.length }
 }
 
 export async function deleteTransactions(deps: Pick<SyncDeps, 'repo'>, userId: string, externalIds: string[]): Promise<void> {

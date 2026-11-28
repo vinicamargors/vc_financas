@@ -27,6 +27,11 @@ export function createSupabaseIngestRepo(admin: SupabaseClient): IngestRepo {
       if (error) throw error
       return (data ?? []).map((a) => ({ id: a.id as string, name: (a.name as string) ?? '', institution: (a.institution as string) ?? '' }))
     },
+    async findBenefitAccount(userId) {
+      const { data, error } = await admin.from('accounts').select('id').eq('user_id', userId).eq('type', 'BENEFIT').order('name').limit(1)
+      if (error) throw error
+      return (data?.[0]?.id as string | undefined) ?? null
+    },
     async ensureManualAccount(userId) {
       const find = () =>
         admin.from('accounts').select('id').eq('user_id', userId).eq('external_id', SHORTCUT_ACCOUNT_EXTERNAL_ID).maybeSingle()
@@ -49,6 +54,7 @@ export function createSupabaseIngestRepo(admin: SupabaseClient): IngestRepo {
       const { error } = await admin.from('transactions').insert({
         user_id: r.userId,
         account_id: r.accountId,
+        payment_method: r.paymentMethod ?? null,
         external_id: null,
         source: 'shortcut',
         date: r.date,

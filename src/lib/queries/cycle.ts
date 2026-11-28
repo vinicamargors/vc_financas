@@ -47,15 +47,18 @@ export function assembleCycleData(raw: {
   today: string
   sources: IncomeSourceRow[]
   commitments: CommitmentInput[]
-  accounts: { id: string; type: 'BANK' | 'CREDIT' }[]
+  /** BENEFIT (VR) fica fora do livre: a recarga não é renda de caixa e as compras não saem do caixa. */
+  accounts: { id: string; type: 'BANK' | 'CREDIT' | 'BENEFIT' }[]
   txs: RawCycleTx[]
 }): CycleData {
   const { today, sources } = raw
+  const benefit = new Set(raw.accounts.filter((a) => a.type === 'BENEFIT').map((a) => a.id))
+  const cashTxs = raw.txs.filter((t) => !benefit.has(t.accountId))
   const typeOf = new Map(raw.accounts.map((a) => [a.id, a.type]))
   const accountType = (t: RawCycleTx): 'BANK' | 'CREDIT' => (typeOf.get(t.accountId) === 'CREDIT' ? 'CREDIT' : 'BANK')
   const salarySource = sources.find((s) => s.kind === 'salary')
 
-  const incomes: IncomeRow[] = raw.txs
+  const incomes: IncomeRow[] = cashTxs
     .filter((t) => t.kind === 'income' && t.amountCents > 0 && accountType(t) === 'BANK')
     .map((t) => ({ id: t.id, date: t.date, amountCents: t.amountCents, incomeSourceId: t.incomeSourceId }))
   const salaries = pickSalaries(incomes, sources)
@@ -71,7 +74,7 @@ export function assembleCycleData(raw: {
   let cardEstimateCents = 0
   let cardPaidCents = 0
   const txs: FreeTx[] = []
-  for (const t of raw.txs) {
+  for (const t of cashTxs) {
     const type = accountType(t)
     if (type === 'CREDIT' && (t.kind === 'expense' || t.kind === 'refund') && inRange(t.date, prev.start, prevEnd)) cardEstimateCents -= t.amountCents
     if (!inRange(t.date, cycle.start, cycle.end) || !FREE_KINDS.has(t.kind)) continue
@@ -152,7 +155,10 @@ export async function loadCycleData(userId: string): Promise<CycleData> {
       categoryId: (c.category_id as string | null) ?? null,
       matchCounterparty: (c.match_counterparty as string | null) ?? null,
     })),
-    accounts: (accounts.data ?? []).map((a) => ({ id: a.id as string, type: classifierAccountType(a.type as string, a.external_id as string | null) })),
+    accounts: (accounts.data ?? []).map((a) => ({
+      id: a.id as string,
+      type: a.type === 'BENEFIT' ? ('BENEFIT' as const) : classifierAccountType(a.type as string, a.external_id as string | null),
+    })),
     txs,
   })
 }

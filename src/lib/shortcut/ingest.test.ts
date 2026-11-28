@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { hashToken } from './token'
 import { ingestShortcut, pickAccount, RATE_LIMIT_PER_HOUR, type IngestRepo, type ShortcutInsert } from './ingest'
 
-interface Acc { id: string; userId: string; type: 'BANK' | 'CREDIT' | 'MANUAL'; name: string; institution: string }
+interface Acc { id: string; userId: string; type: 'BANK' | 'CREDIT' | 'MANUAL' | 'BENEFIT'; name: string; institution: string }
 
 function memory(accounts: Acc[] = []) {
   const tokens = new Map<string, string>([[hashToken('tok-a'), 'A'], [hashToken('tok-b'), 'B']])
@@ -16,6 +16,9 @@ function memory(accounts: Acc[] = []) {
     },
     async listCreditAccounts(userId) {
       return accs.filter((a) => a.userId === userId && a.type === 'CREDIT').map(({ id, name, institution }) => ({ id, name, institution }))
+    },
+    async findBenefitAccount(userId) {
+      return accs.find((a) => a.userId === userId && a.type === 'BENEFIT')?.id ?? null
     },
     async ensureManualAccount(userId) {
       let a = accs.find((x) => x.userId === userId && x.type === 'MANUAL')
@@ -115,5 +118,22 @@ describe('ingestShortcut', () => {
     const log = vi.fn()
     expect((await ingestShortcut(m.repo, req({ amount: 1, merchant: 'X' }), now, log)).status).toBe(201)
     expect(log).toHaveBeenCalledWith('atalho: classificação falhou')
+  })
+
+  it('cartão de benefício vai para a conta VR do usuário', async () => {
+    const m = memory([
+      { id: 'c1', userId: 'A', type: 'CREDIT', name: 'Nubank', institution: 'Nubank' },
+      { id: 'vr-a', userId: 'A', type: 'BENEFIT', name: 'VR', institution: 'VR' },
+      { id: 'vr-b', userId: 'B', type: 'BENEFIT', name: 'VR', institution: 'VR' },
+    ])
+    await ingestShortcut(m.repo, req({ amount: 30, merchant: 'Restaurante', card: 'Alelo Refeição' }), now)
+    expect(m.inserted[0].accountId).toBe('vr-a')
+    // Sem conta VR, segue a regra normal (único cartão).
+    const n = memory([{ id: 'c1', userId: 'A', type: 'CREDIT', name: 'Nubank', institution: 'Nubank' }])
+    await ingestShortcut(n.repo, req({ amount: 30, merchant: 'Restaurante', card: 'Ticket' }), now)
+    expect(n.inserted[0].accountId).toBe('c1')
+    // ... mas marcada como compra de benefício, para nunca ser fundida com a fatura do cartão.
+    expect(n.inserted[0].paymentMethod).toBe('BENEFIT')
+    expect(m.inserted[0].paymentMethod).toBe('BENEFIT')
   })
 })

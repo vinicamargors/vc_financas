@@ -37,7 +37,12 @@ export default async function ExtratoPage() {
   const now = new Date()
   return (
     <main>
-      <h1 className="title">Extrato</h1>
+      <div className="title-row">
+        <h1 className="title">Extrato</h1>
+        <Link href="/lancar" className="btn secondary">
+          Lançar
+        </Link>
+      </div>
       <StatementView initial={first} today={toLocalDate(now)} yesterday={toLocalDate(subDays(now, 1))} />
     </main>
   )
