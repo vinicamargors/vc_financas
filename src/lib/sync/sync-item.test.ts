@@ -153,11 +153,11 @@ describe('syncItem', () => {
       await syncItem({ source: fakeSource({ accounts: mp([box('b1', 10)]), txs }).source, repo, today, now }, U, ITEM)
       const byId = new Map(repo.dump().transactions.map((t) => [t.externalId, t]))
       expect(byId.get('r1')?.kind).toBe('savings_yield')
-      expect(byId.get('p1')?.kind).toBeUndefined()
+      expect(byId.get('p1')?.kind).toBe('income')
 
       const repo2 = createMemoryRepo()
       await syncItem({ source: fakeSource({ txs }).source, repo: repo2, today, now }, U, ITEM)
-      expect(repo2.dump().transactions.every((t) => t.kind === undefined)).toBe(true)
+      expect(repo2.dump().transactions.every((t) => t.kind === 'income')).toBe(true)
     })
   })
 })

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ClassifyTx, Kind, Rule } from '@/lib/classify/classify'
 import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
 
 /** Espelha as colunas de `connections` (camelCase). */
@@ -16,6 +17,33 @@ export interface ConnectionRow {
   createdAt: string
 }
 
+/** Lançamento como o classificador vê, mais a categoria/merchant gravados (para comparar). */
+export type StoredClassifyTx = ClassifyTx & { categoryId: string | null; merchantId: string | null }
+
+export interface ClassificationData {
+  /** Janela `[from, to]` em todas as contas, mais os pares de linhas ligadas (mesmo fora da janela). */
+  transactions: StoredClassifyTx[]
+  accounts: { id: string; type: 'BANK' | 'CREDIT' }[]
+  rules: Rule[]
+  merchants: { id: string; categoryId: string | null }[]
+  categories: { id: string; name: string }[]
+  ownerCpf: string | null
+}
+
+export interface ClassificationPatch {
+  id: string
+  kind: Kind
+  categoryId: string | null
+  merchantId: string | null
+}
+
+export interface ClassificationChanges {
+  /** Zerar `linked_transaction_id` (aplicado antes de `links`). */
+  unlinked: string[]
+  links: { id: string; linkedId: string }[]
+  decisions: ClassificationPatch[]
+}
+
 export type ConnectionInput = Omit<ConnectionRow, 'id' | 'createdAt'>
 
 export interface SyncRepo {
@@ -30,13 +58,23 @@ export interface SyncRepo {
   upsertSavingsBoxes(rows: SavingsBoxRow[]): Promise<{ id: string; externalId: string }[]>
   /** Conflito em `user_id,box_id,date`: mesmo dia sobrescreve. */
   upsertSavingsBoxSnapshots(userId: string, date: string, rows: { boxId: string; balanceCents: number }[]): Promise<void>
+  /** Grava `profiles.cpf` (só dígitos) quando ainda está vazio. */
+  saveOwnerCpfIfEmpty(userId: string, cpf: string): Promise<void>
+  loadClassificationData(userId: string, from: string, to: string): Promise<ClassificationData>
+  /** Aplica na ordem unlinked → links → decisions, só em linhas `classified_by = 'auto'`. */
+  applyClassification(userId: string, changes: ClassificationChanges): Promise<void>
 }
 
 const CHUNK = 500
 
-function chunks<T>(xs: T[]): T[][] {
+/** Listas de uuid vão na URL (`in.(...)`): lotes menores. */
+const ID_CHUNK = 100
+/** Teto de linhas por resposta do PostgREST (`max_rows`). */
+const PAGE = 1000
+
+function chunks<T>(xs: T[], size = CHUNK): T[][] {
   const out: T[][] = []
-  for (let i = 0; i < xs.length; i += CHUNK) out.push(xs.slice(i, i + CHUNK))
+  for (let i = 0; i < xs.length; i += size) out.push(xs.slice(i, i + size))
   return out
 }
 
@@ -52,6 +90,43 @@ interface ConnectionDb {
   last_synced_at: string | null
   created_at: string
 }
+
+interface TxDb {
+  id: string
+  account_id: string
+  date: string
+  amount_cents: number
+  description_raw: string
+  pluggy_category: string | null
+  counterparty_name: string | null
+  counterparty_doc: string | null
+  payment_method: string | null
+  kind: Kind | null
+  classified_by: 'auto' | 'user'
+  linked_transaction_id: string | null
+  category_id: string | null
+  merchant_id: string | null
+}
+
+const TX_COLUMNS =
+  'id, account_id, date, amount_cents, description_raw, pluggy_category, counterparty_name, counterparty_doc, payment_method, kind, classified_by, linked_transaction_id, category_id, merchant_id'
+
+const txFromDb = (r: TxDb): StoredClassifyTx => ({
+  id: r.id,
+  accountId: r.account_id,
+  date: r.date,
+  amountCents: Number(r.amount_cents),
+  descriptionRaw: r.description_raw,
+  pluggyCategory: r.pluggy_category,
+  counterpartyName: r.counterparty_name,
+  counterpartyDoc: r.counterparty_doc,
+  paymentMethod: r.payment_method,
+  kind: r.kind,
+  classifiedBy: r.classified_by,
+  linkedTransactionId: r.linked_transaction_id,
+  categoryId: r.category_id,
+  merchantId: r.merchant_id,
+})
 
 const fromDb = (r: ConnectionDb): ConnectionRow => ({
   id: r.id,
@@ -225,6 +300,102 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
         { onConflict: 'user_id,box_id,date' },
       )
       if (error) throw error
+    },
+
+    async saveOwnerCpfIfEmpty(userId, cpf) {
+      const { error } = await admin
+        .from('profiles')
+        .update({ cpf })
+        .eq('user_id', userId)
+        .or('cpf.is.null,cpf.eq.')
+      if (error) throw error
+    },
+
+    async loadClassificationData(userId, from, to) {
+      const [accounts, rules, merchants, categories, profile] = await Promise.all([
+        admin.from('accounts').select('id, type').eq('user_id', userId),
+        admin.from('rules').select('match_field, pattern, merchant_id, category_id, kind').eq('user_id', userId).order('created_at'),
+        admin.from('merchants').select('id, category_id').eq('user_id', userId),
+        admin.from('categories').select('id, name').eq('user_id', userId),
+        admin.from('profiles').select('cpf').eq('user_id', userId).maybeSingle(),
+      ])
+      for (const r of [accounts, rules, merchants, categories, profile]) if (r.error) throw r.error
+      const rows: StoredClassifyTx[] = []
+      for (let offset = 0; ; offset += PAGE) {
+        const { data, error } = await admin
+          .from('transactions')
+          .select(TX_COLUMNS)
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .gte('date', from)
+          .lte('date', to)
+          .order('id')
+          .range(offset, offset + PAGE - 1)
+        if (error) throw error
+        rows.push(...((data ?? []) as TxDb[]).map(txFromDb))
+        if ((data ?? []).length < PAGE) break
+      }
+      const have = new Set(rows.map((t) => t.id))
+      const missing = [...new Set(rows.map((t) => t.linkedTransactionId).filter((id): id is string => !!id && !have.has(id)))]
+      for (const part of chunks(missing, ID_CHUNK)) {
+        const { data, error } = await admin.from('transactions').select(TX_COLUMNS).eq('user_id', userId).is('deleted_at', null).in('id', part)
+        if (error) throw error
+        rows.push(...((data ?? []) as TxDb[]).map(txFromDb))
+      }
+      return {
+        transactions: rows,
+        accounts: (accounts.data ?? []).map((a) => ({ id: a.id as string, type: a.type as 'BANK' | 'CREDIT' })),
+        rules: (rules.data ?? []).map((r) => ({
+          matchField: r.match_field as Rule['matchField'],
+          pattern: r.pattern as string,
+          merchantId: (r.merchant_id as string | null) ?? null,
+          categoryId: (r.category_id as string | null) ?? null,
+          kind: (r.kind as Kind | null) ?? null,
+        })),
+        merchants: (merchants.data ?? []).map((m) => ({ id: m.id as string, categoryId: (m.category_id as string | null) ?? null })),
+        categories: (categories.data ?? []).map((c) => ({ id: c.id as string, name: c.name as string })),
+        ownerCpf: (profile.data?.cpf as string | null | undefined) ?? null,
+      }
+    },
+
+    async applyClassification(userId, { unlinked, links, decisions }) {
+      // Toda escrita filtra user_id e classified_by = 'auto' (a escolha do usuário nunca é sobrescrita).
+      const autoRows = () => admin.from('transactions')
+      for (const part of chunks(unlinked, ID_CHUNK)) {
+        const { error } = await autoRows()
+          .update({ linked_transaction_id: null })
+          .eq('user_id', userId)
+          .eq('classified_by', 'auto')
+          .in('id', part)
+        if (error) throw error
+      }
+      // Ligações são poucas (pares) e cada uma tem valor próprio.
+      for (const l of links) {
+        const { error } = await autoRows()
+          .update({ linked_transaction_id: l.linkedId })
+          .eq('user_id', userId)
+          .eq('classified_by', 'auto')
+          .eq('id', l.id)
+        if (error) throw error
+      }
+      // Decisões agrupadas por valor: um UPDATE por combinação (kind, categoria, merchant).
+      const groups = new Map<string, { patch: Omit<ClassificationPatch, 'id'>; ids: string[] }>()
+      for (const d of decisions) {
+        const key = `${d.kind}|${d.categoryId ?? ''}|${d.merchantId ?? ''}`
+        const g = groups.get(key) ?? { patch: { kind: d.kind, categoryId: d.categoryId, merchantId: d.merchantId }, ids: [] }
+        g.ids.push(d.id)
+        groups.set(key, g)
+      }
+      for (const { patch, ids } of groups.values()) {
+        for (const part of chunks(ids, ID_CHUNK)) {
+          const { error } = await autoRows()
+            .update({ kind: patch.kind, category_id: patch.categoryId, merchant_id: patch.merchantId })
+            .eq('user_id', userId)
+            .eq('classified_by', 'auto')
+            .in('id', part)
+          if (error) throw error
+        }
+      }
     },
   }
 }

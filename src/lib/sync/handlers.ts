@@ -2,6 +2,7 @@ import 'server-only'
 import { toLocalDate } from '@/lib/format/date'
 import { loadPluggySource, type PluggySource } from '@/lib/pluggy/source'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { reclassifyAll } from './classification'
 import { createSupabaseSyncRepo, type SyncRepo } from './repo'
 import { deleteTransactions, syncItem, type SyncResult } from './sync-item'
 
@@ -125,6 +126,7 @@ export function createProductionSync() {
         itemId,
       ),
     runDelete: (userId: string, ids: string[]) => deleteTransactions({ repo }, userId, ids),
+    reclassifyAll: (userId: string) => reclassifyAll({ repo, today: toLocalDate(new Date()) }, userId),
     async findUserByWebhookSecret(secret: string) {
       const { data, error } = await admin
         .from('pluggy_credentials')

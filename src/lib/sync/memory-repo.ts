@@ -1,8 +1,23 @@
+import type { Kind, Rule } from '@/lib/classify/classify'
 import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
-import type { ConnectionRow, SyncRepo } from './repo'
+import type { ClassificationChanges, ConnectionRow, SyncRepo } from './repo'
 
 export type StoredAccount = AccountRow & { id: string }
-export type StoredTransaction = TransactionRow & { deletedAt: string | null }
+export type StoredTransaction = Omit<TransactionRow, 'kind'> & {
+  id: string
+  deletedAt: string | null
+  kind?: Kind | null
+  classifiedBy: 'auto' | 'user'
+  categoryId: string | null
+  merchantId: string | null
+  linkedTransactionId: string | null
+}
+export interface Seed {
+  categories?: { id: string; userId: string; name: string }[]
+  merchants?: { id: string; userId: string; categoryId: string | null }[]
+  rules?: (Rule & { userId: string })[]
+  profileCpf?: Record<string, string>
+}
 export type StoredBox = SavingsBoxRow & { id: string }
 export interface StoredBoxSnapshot {
   userId: string
@@ -19,7 +34,12 @@ export interface StoredSnapshot {
 
 /** Repositório em memória com a mesma semântica de upsert do Supabase (para testes). */
 export function createMemoryRepo(): SyncRepo & {
+  seed(s: Seed): void
+  /** Altera uma linha direto (simula edição do usuário ou dado legado). */
+  patch(id: string, p: Partial<StoredTransaction>): void
+  calls: { applyClassification: ClassificationChanges[] }
   dump(): {
+    profiles: Map<string, { cpf: string | null }>
     connections: ConnectionRow[]
     accounts: StoredAccount[]
     transactions: StoredTransaction[]
@@ -34,6 +54,12 @@ export function createMemoryRepo(): SyncRepo & {
   const snapshots = new Map<string, StoredSnapshot>()
   const boxes = new Map<string, StoredBox>()
   const boxSnapshots = new Map<string, StoredBoxSnapshot>()
+  const profiles = new Map<string, { cpf: string | null }>()
+  const categories: NonNullable<Seed['categories']> = []
+  const merchants: NonNullable<Seed['merchants']> = []
+  const rules: NonNullable<Seed['rules']> = []
+  const calls = { applyClassification: [] as ClassificationChanges[] }
+  const txById = (id: string) => [...transactions.values()].find((t) => t.id === id)
   let seq = 0
   const newId = () => `id-${++seq}`
 
@@ -66,7 +92,16 @@ export function createMemoryRepo(): SyncRepo & {
         const key = `${r.userId}:${r.externalId}`
         keys.add(key)
         const prev = transactions.get(key)
-        transactions.set(key, { ...r, kind: r.kind ?? prev?.kind, deletedAt: prev?.deletedAt ?? null })
+        transactions.set(key, {
+          ...r,
+          id: prev?.id ?? newId(),
+          kind: r.kind ?? prev?.kind,
+          deletedAt: prev?.deletedAt ?? null,
+          classifiedBy: prev?.classifiedBy ?? 'auto',
+          categoryId: prev?.categoryId ?? null,
+          merchantId: prev?.merchantId ?? null,
+          linkedTransactionId: prev?.linkedTransactionId ?? null,
+        })
       }
       return keys.size
     },
@@ -90,7 +125,72 @@ export function createMemoryRepo(): SyncRepo & {
     async upsertSavingsBoxSnapshots(userId, date, rows) {
       for (const r of rows) boxSnapshots.set(`${userId}:${r.boxId}:${date}`, { userId, boxId: r.boxId, date, balanceCents: r.balanceCents })
     },
+    async saveOwnerCpfIfEmpty(userId, cpf) {
+      const p = profiles.get(userId)
+      if (!p?.cpf) profiles.set(userId, { cpf })
+    },
+    async loadClassificationData(userId, from, to) {
+      const live = [...transactions.values()].filter((t) => t.userId === userId && !t.deletedAt)
+      const inWindow = live.filter((t) => t.date >= from && t.date <= to)
+      const ids = new Set(inWindow.map((t) => t.id))
+      const partners = live.filter((t) => !ids.has(t.id) && inWindow.some((w) => w.linkedTransactionId === t.id))
+      return {
+        transactions: [...inWindow, ...partners].map((t) => ({
+          id: t.id,
+          accountId: t.accountId,
+          date: t.date,
+          amountCents: t.amountCents,
+          descriptionRaw: t.descriptionRaw,
+          pluggyCategory: t.pluggyCategory,
+          counterpartyName: t.counterpartyName,
+          counterpartyDoc: t.counterpartyDoc,
+          paymentMethod: t.paymentMethod,
+          kind: t.kind ?? null,
+          classifiedBy: t.classifiedBy,
+          linkedTransactionId: t.linkedTransactionId,
+          categoryId: t.categoryId,
+          merchantId: t.merchantId,
+        })),
+        accounts: [...accounts.values()].filter((a) => a.userId === userId).map((a) => ({ id: a.id, type: a.type })),
+        rules: rules.filter((r) => r.userId === userId).map((r) => ({ matchField: r.matchField, pattern: r.pattern, merchantId: r.merchantId, categoryId: r.categoryId, kind: r.kind })),
+        merchants: merchants.filter((m) => m.userId === userId).map((m) => ({ id: m.id, categoryId: m.categoryId })),
+        categories: categories.filter((c) => c.userId === userId).map((c) => ({ id: c.id, name: c.name })),
+        ownerCpf: profiles.get(userId)?.cpf ?? null,
+      }
+    },
+    async applyClassification(userId, changes) {
+      calls.applyClassification.push(structuredClone(changes))
+      const auto = (id: string) => {
+        const t = txById(id)
+        return t && t.userId === userId && t.classifiedBy === 'auto' ? t : undefined
+      }
+      for (const id of changes.unlinked) {
+        const t = auto(id)
+        if (t) t.linkedTransactionId = null
+      }
+      for (const l of changes.links) {
+        const t = auto(l.id)
+        if (t) t.linkedTransactionId = l.linkedId
+      }
+      for (const d of changes.decisions) {
+        const t = auto(d.id)
+        if (t) Object.assign(t, { kind: d.kind, categoryId: d.categoryId, merchantId: d.merchantId })
+      }
+    },
+    seed(s) {
+      categories.push(...(s.categories ?? []))
+      merchants.push(...(s.merchants ?? []))
+      rules.push(...(s.rules ?? []))
+      for (const [u, cpf] of Object.entries(s.profileCpf ?? {})) profiles.set(u, { cpf })
+    },
+    patch(id, p) {
+      const t = txById(id)
+      if (!t) throw new Error(`transação ${id} não existe`)
+      Object.assign(t, p)
+    },
+    calls,
     dump: () => ({
+      profiles,
       boxes: [...boxes.values()],
       boxSnapshots: [...boxSnapshots.values()],
       connections: [...connections.values()],

@@ -9,6 +9,8 @@ import {
   type TransactionRow,
 } from '@/lib/pluggy/map'
 import { toLocalDate } from '@/lib/format/date'
+import { onlyDigits } from '@/lib/classify/normalize'
+import { classifyWindow } from './classification'
 import type { SyncRepo } from './repo'
 
 export interface SyncDeps {
@@ -146,6 +148,13 @@ export async function syncItem(deps: SyncDeps, userId: string, itemId: string): 
     txCount += await repo.upsertTransactions(mapped)
     await repo.upsertBalanceSnapshot(userId, row.id, today, accountRows[i].balanceCents)
   }
+
+  // Dono das contas (CPF/CNPJ e nome): só para classificar transferências próprias. Nunca vai para log.
+  const ownerDocs = [...new Set(accounts.map((a) => onlyDigits(a.taxNumber)).filter(Boolean))]
+  const ownerNames = [...new Set(accounts.map((a) => a.owner?.trim() ?? '').filter(Boolean))]
+  const cpf = ownerDocs.find((d) => d.length === 11)
+  if (cpf) await repo.saveOwnerCpfIfEmpty(userId, cpf)
+  await classifyWindow(repo, userId, { from: minusDays(from, OVERLAP_DAYS), to: today, ownerDocs, ownerNames })
 
   await repo.upsertConnection({ ...base, lastSyncedAt: now.toISOString() })
   return {
