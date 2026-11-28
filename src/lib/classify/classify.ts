@@ -70,7 +70,7 @@ export interface ClassifyResult {
   unlinked: string[]
 }
 
-const BANK_CARD_PAYMENT = /pagamento.*fatura|pag(to)?\s*fatura|fatura.*cart|pagto cartao|pagamento cartao/i
+const BANK_CARD_PAYMENT = /pagamento.*fatura|pag(to)?\s*fatura|fatura.*cart|pagto cartao|pagamento cartao|recebto pagto|pagto antec|pagamento antecipado/i
 const CREDIT_CARD_PAYMENT = /pagamento (recebido|efetuado)|pagto recebido|pagamento de fatura/i
 // Mercado Pago: "Dinheiro reservado <caixinha>" / "Dinheiro retirado <caixinha>".
 const INVEST_IN = /aplica[cç][aã]o|apl\.|cofrinho|caixinha|guardar|guardado|investimento|dinheiro reservado|reserva(do|da)? (para|em)\b/i
@@ -235,7 +235,8 @@ export function classify(txs: ClassifyTx[], ctx: ClassifyContext): ClassifyResul
   // 3. Par casado entre contas do usuário.
   const candidates = auto.filter((t) => !decided.has(t.id) && t.amountCents !== 0)
   for (const [o, i] of pairTransfers(candidates, accountType)) {
-    const card = isCardPayment(o, accountType.get(o.accountId)) && isCardPayment(i, accountType.get(i.accountId))
+    // O lado do cartão ("Pagamento recebido") basta: o Pix/boleto do banco nem sempre diz "fatura".
+    const card = accountType.get(i.accountId) === 'CREDIT' && isCardPayment(i, 'CREDIT')
     // Só vira transferência com sinal forte de dinheiro próprio; valor igual sozinho é coincidência possível.
     const own = ownMoney.has(o.id) || ownMoney.has(i.id)
     const kind: Kind = card ? 'card_payment' : own ? 'transfer' : 'pending_review'
