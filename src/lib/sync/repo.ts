@@ -110,6 +110,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
             subtype: r.subtype,
             name: r.name,
             institution: r.institution,
+            logo_url: r.logoUrl ?? null,
             balance_cents: r.balanceCents,
             credit_limit_cents: r.creditLimitCents,
             closing_day: r.closingDay,

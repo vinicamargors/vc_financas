@@ -14,6 +14,8 @@ export interface PluggySource {
   /** Registra o webhook e devolve o id. O segredo é enviado no header `x-vc-secret`. */
   registerWebhook(url: string, secret: string): Promise<string>
   deleteWebhook(id: string): Promise<void>
+  /** Logo do conector com esse nome (Brasil), se houver. */
+  findConnectorLogo?(name: string): Promise<string | null>
 }
 
 /** O SDK rejeita com o corpo da resposta (`{ code }`) ou com um HTTPError (`response.statusCode`). */
@@ -43,6 +45,11 @@ export function createPluggySource(clientId: string, clientSecret: string): Plug
       return (await client.fetchAccounts(itemId)).results
     },
     fetchTransactions: (accountId, from) => client.fetchAllTransactions(accountId, { dateFrom: from }),
+    async findConnectorLogo(name) {
+      const { results } = await client.fetchConnectors({ name, countries: ['BR'] })
+      const hit = results.find((c) => c.name.toLowerCase() === name.toLowerCase()) ?? results[0]
+      return hit?.imageUrl ?? null
+    },
     async createConnectToken() {
       return (await client.createConnectToken()).accessToken
     },
