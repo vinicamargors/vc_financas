@@ -34,3 +34,14 @@ export function detectInstitution(
   if (byCode) return byCode.name
   return account.marketingName?.trim() || account.name
 }
+
+/**
+ * Contas sem pista de banco (ex.: cartão "VISA INFINITE") herdam o banco quando
+ * as demais contas da mesma conexão apontam para um único banco conhecido.
+ */
+export function inheritInstitution(institutions: string[]): string[] {
+  const known = new Set(institutions.filter((i) => KNOWN_BANKS.some((b) => b.name === i)))
+  if (known.size !== 1) return institutions
+  const [only] = known
+  return institutions.map((i) => (KNOWN_BANKS.some((b) => b.name === i) ? i : only))
+}
