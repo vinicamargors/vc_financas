@@ -158,9 +158,9 @@ export default async function InicioPage() {
           <p>
             <Money cents={spend.spendingCents} className="val" />
             {spend.pendingCents > 0 && (
-              <span className="pend">
+              <Link href="/revisar" className="pend">
                 + <Money cents={spend.pendingCents} /> a confirmar
-              </span>
+              </Link>
             )}
           </p>
         </section>
