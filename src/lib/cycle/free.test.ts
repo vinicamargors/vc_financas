@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeFree, type CommitmentInput, type FreeInput, type FreeTx } from './free'
+import { computeFree, freeExceedsBalance, type CommitmentInput, type FreeInput, type FreeTx } from './free'
 
 const cycle = { start: '2026-11-27', end: '2026-12-29' }
 const today = '2026-12-20' // 10 dias restantes, hoje incluso
@@ -158,3 +158,12 @@ describe('computeFree', () => {
   })
 })
 
+
+describe('freeExceedsBalance', () => {
+  it('avisa só quando o livre positivo passa do saldo em conta', () => {
+    expect(freeExceedsBalance(455_300, 276_800)).toBe(true)
+    expect(freeExceedsBalance(276_800, 276_800)).toBe(false)
+    expect(freeExceedsBalance(-1, 0)).toBe(false)
+    expect(freeExceedsBalance(0, 0)).toBe(false)
+  })
+})

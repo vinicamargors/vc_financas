@@ -1,7 +1,9 @@
 import Link from 'next/link'
+import { FreeWarning } from '@/components/free-warning'
 import { Money } from '@/components/money'
 import { computeFree, type CommitmentStatus } from '@/lib/cycle/free'
 import { formatLocalDayMonth as dm, toLocalDate } from '@/lib/format/date'
+import { loadHomeData } from '@/lib/queries/balances'
 import { loadCycleData } from '@/lib/queries/cycle'
 import { ExtraIncomeSection } from './extra-income'
 import { requireUser } from '@/lib/supabase/server'
@@ -18,7 +20,7 @@ const STATUS: Record<CommitmentStatus, { mark: string; label: string }> = {
 
 export default async function PagamentoPage() {
   const user = await requireUser()
-  const data = await loadCycleData(user.id)
+  const [data, home] = await Promise.all([loadCycleData(user.id), loadHomeData().catch(() => null)])
   const { cycle } = data
   const free = computeFree({ ...data, today: toLocalDate(new Date()) })
   const received = data.salaryCents > 0
@@ -112,6 +114,7 @@ export default async function PagamentoPage() {
             </p>
           </>
         )}
+        <FreeWarning freeCents={free.freeCents} balanceCents={home?.summary.totalCents ?? null} />
       </section>
 
       <section className="step">

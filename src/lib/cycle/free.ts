@@ -166,3 +166,8 @@ export function computeFree(input: FreeInput): FreeResult {
   const freePerDayCents = freeCents > 0 ? Math.floor(freeCents / daysLeft) : 0
   return { freeCents, freePerDayCents, daysLeft, commitments, cardThisCycleCents, savedCents, extrasCountedCents: extrasCents }
 }
+
+/** Livre maior que o dinheiro na conta corrente: sinal de entrada contada a mais ou lançamento sem classificar. */
+export function freeExceedsBalance(freeCents: number, checkingBalanceCents: number): boolean {
+  return freeCents > 0 && freeCents > checkingBalanceCents
+}

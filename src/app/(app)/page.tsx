@@ -17,6 +17,7 @@ import { loadBenefitWithRecharges } from '@/lib/queries/benefit'
 import { loadRealSpending } from '@/lib/queries/spending'
 import { loadReview, reviewCount } from '@/lib/queries/review'
 import { createServerSupabase, requireUser } from '@/lib/supabase/server'
+import { FreeWarning } from '@/components/free-warning'
 import { ExtraIncomeSection } from './pagamento/extra-income'
 import { safeErrorMessage } from '@/lib/sync/safe-error'
 
@@ -277,7 +278,10 @@ export default async function InicioPage() {
     <main>
       {hello}
       {cycleData && free ? (
-        <FreeHero data={cycleData} free={free} />
+        <>
+          <FreeHero data={cycleData} free={free} />
+          <FreeWarning freeCents={free.freeCents} balanceCents={summary.totalCents} />
+        </>
       ) : (
         <>
           <h1 className="sr-only">Início</h1>

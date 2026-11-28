@@ -1740,3 +1740,9 @@ a.period-step:hover {
   grid-column: 1 / -1;
   justify-self: start;
 }
+
+.free-warn {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
