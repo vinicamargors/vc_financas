@@ -39,3 +39,31 @@ Migração `20261129000300_goals_fgts.sql`:
 - **/config/fgts:** saldo, data do saldo, salário bruto e o líquido de referência (sugerido pelo último salário reconhecido). Lembrete no Início quando o saldo tiver mais de 90 dias.
 - **Início:** o bloco Caixinhas mostra o total. Se houver meta, mostra o "Potencial" dela.
 - Links em Bancos, na seção de configurações: FGTS e Metas.
+
+### Task 4: VR (vale-refeição, pedido do dono)
+- **Conta VR do usuário:** tipo `BENEFIT`. Ela não vem da Pluggy, porque o VR não está no Open Finance. A migração `20261129000400_benefit_manual.sql` permite `BENEFIT` no check de `accounts.type`.
+- **Recarga:** em `/config/vr` o usuário informa nome, valor mensal e dia da recarga. O app lança uma entrada `income` com `source='manual'` no dia da recarga, sem duplicar no mês.
+- **Saídas:** o Atalho manda a compra para a conta VR quando o nome do cartão bate com `alelo|ticket|\bvr\b|pluxee|sodexo|flash|caju|swile|ben visa|vale`. Também dá para lançar à mão (Task 5).
+- **Saldo:** recargas − saídas. Aparece no Início como "VR", separado do saldo em conta.
+- **Gasto real:** a compra no VR conta como gasto.
+- **Livre:** o VR fica fora. A recarga não é renda de caixa e as compras não saem do caixa.
+
+### Task 5: Lançamento manual com conferência (pedido do dono)
+- **Botão "Lançar"** no Início e no Extrato, com estes campos:
+  - gasto ou entrada
+  - conta (bancos, cartões, VR)
+  - valor
+  - descrição
+  - categoria
+  - data e hora (padrão: agora)
+- O lançamento é salvo com `source='manual'`, `classified_by='user'` e `kind` expense ou income.
+- **Conferência na sincronização:** generaliza a fusão do Atalho para `source in ('shortcut','manual')`. Os candidatos são lançamentos da Pluggy na mesma conta, com o mesmo valor absoluto, com até 1 dia de diferença e criados depois do manual menos 10 minutos.
+  - **Certeza** (exatamente 1 candidato, mesma conta e mesmo valor, e descrição parecida ou hora com até 2 horas de diferença): mantém a classificação do usuário, copiada para a linha da Pluggy. O manual é apagado e fica ligado à linha da Pluggy.
+  - **Dúvida** (mais de 1 candidato, ou valor diferente em até 5%, ou conta diferente do mesmo banco): grava `reconcile_candidate_id` no manual. A tela Revisar ganha a seção "É o mesmo lançamento?":
+    - "É o mesmo" funde os dois.
+    - "São diferentes" marca o manual como conferido.
+  - **Sem par depois de 3 dias:** o lançamento manual fica com a etiqueta "não apareceu no banco" e continua contando.
+- **Migração:**
+  - `transactions.reconcile_candidate_id uuid null`, ligado à própria tabela com FK composta e `on delete set null`
+  - `transactions.reconciled bool default false`
+- **Testes:** os casos de certeza, dúvida e sem par, e que nada passa de um usuário para outro.
