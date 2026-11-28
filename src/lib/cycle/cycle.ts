@@ -28,7 +28,7 @@ function shiftMonth(year: number, month: number, delta: number): [number, number
  * Ciclo atual: começa no último salário e termina na véspera do próximo salário previsto.
  * Um salário pertence ao mês M se cai a partir de 10 dias antes do previsto de M e antes de (previsto de M+1 − 10 dias).
  * Se o previsto seguinte já chegou sem salário, o ciclo é marcado `late` e se estende como se ele fosse cair
- * (fim = véspera do previsto do mês depois). Sem salário há mais de 45 dias, ou sem regra, é o mês do calendário.
+ * (fim = véspera do previsto do mês depois). Sem salário há mais de 45 dias é o mês do calendário, ainda `late`; sem regra, mês do calendário.
  * Sem nenhum salário registrado, começa na data prevista do mês (ou do mês anterior, se ainda não chegou).
  */
 export function currentCycle({ today, salaryDates, rule, fixedDay }: CycleInput): Cycle {
@@ -42,7 +42,7 @@ export function currentCycle({ today, salaryDates, rule, fixedDay }: CycleInput)
   const lastSalary = salaryDates.filter((d) => d <= today).sort().at(-1)
 
   if (lastSalary) {
-    if (daysBetween(lastSalary, today) > LATE_CAP_DAYS) return calendar
+    if (daysBetween(lastSalary, today) > LATE_CAP_DAYS) return { ...calendar, late: true }
     const [sy, sm] = parseYmd(lastSalary)
     const [my, mm] = [1, 0, -1]
       .map((delta) => shiftMonth(sy, sm, delta))

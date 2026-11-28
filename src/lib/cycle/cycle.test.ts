@@ -46,7 +46,7 @@ describe('currentCycle', () => {
   })
   it('mais de 45 dias sem salário: mês do calendário', () => {
     expect(currentCycle({ today: '2026-12-15', salaryDates: ['2026-10-29'], rule })).toEqual({
-      start: '2026-12-01', end: '2026-12-31', nextPayday: null, source: 'calendar', late: false,
+      start: '2026-12-01', end: '2026-12-31', nextPayday: null, source: 'calendar', late: true,
     })
   })
   it('salário no meio do mês (12/11) pertence a outubro', () => {
