@@ -35,14 +35,21 @@ describe('keysetOr', () => {
 describe('filterPredicate', () => {
   it('mapeia cada filtro', () => {
     expect(filterPredicate('tudo')).toBeNull()
-    expect(filterPredicate('entradas')).toEqual({ column: 'amount_cents', op: 'gt', value: 0 })
-    expect(filterPredicate('saidas')).toEqual({ column: 'amount_cents', op: 'lt', value: 0 })
+    expect(filterPredicate('entradas')).toEqual({ column: 'kind', op: 'in', value: '(income,refund)' })
+    expect(filterPredicate('saidas')).toEqual({ column: 'kind', op: 'eq', value: 'expense' })
     expect(filterPredicate('cartao')).toEqual({ column: 'card_last4', op: 'not.is', value: null })
   })
 })
 
 describe('mergeGroups', () => {
-  const t = (i: string, date: string, amountCents: number) => ({ id: i, date, amountCents, deletedAt: null })
+  const t = (i: string, date: string, amountCents: number, kind: string | null = 'expense') => ({ id: i, date, amountCents, deletedAt: null, kind })
+  it('não soma no total do dia o que não é despesa/entrada/estorno', () => {
+    const base = [{ date: '2026-11-27', totalCents: 100, items: [t('a', '2026-11-27', 100, 'income')] }]
+    const next = [{ date: '2026-11-27', totalCents: 0, items: [t('x', '2026-11-27', -9000, 'transfer'), t('b', '2026-11-27', -50)] }]
+    const r = mergeGroups(base, next)
+    expect(r[0].items.map((i) => i.id)).toEqual(['a', 'x', 'b'])
+    expect(r[0].totalCents).toBe(50)
+  })
   it('funde dia que continua, sem duplicar', () => {
     const base = [{ date: '2026-11-27', totalCents: 100, items: [t('a', '2026-11-27', 100)] }]
     const next = [

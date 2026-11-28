@@ -1,3 +1,4 @@
+import { countsInDayTotal } from '@/lib/queries/totals'
 import type { DayGroup, StatementTx } from '@/lib/queries/statement'
 
 export type Filter = 'tudo' | 'entradas' | 'saidas' | 'cartao'
@@ -11,8 +12,8 @@ export const FILTERS: { id: Filter; label: string }[] = [
 
 const MATCH: Record<Filter, (t: StatementTx) => boolean> = {
   tudo: () => true,
-  entradas: (t) => t.amountCents > 0 && !t.isYield,
-  saidas: (t) => t.amountCents < 0,
+  entradas: (t) => t.kind === 'income' || t.kind === 'refund',
+  saidas: (t) => t.kind === 'expense',
   cartao: (t) => Boolean(t.cardLast4),
 }
 
@@ -22,7 +23,7 @@ export function filterDays(days: DayGroup<StatementTx>[], filter: Filter): DayGr
   const out: DayGroup<StatementTx>[] = []
   for (const d of days) {
     const items = d.items.filter(MATCH[filter])
-    if (items.length) out.push({ date: d.date, items, totalCents: items.reduce((s, t) => s + t.amountCents, 0) })
+    if (items.length) out.push({ date: d.date, items, totalCents: items.reduce((s, t) => (countsInDayTotal(t.kind) ? s + t.amountCents : s), 0) })
   }
   return out
 }
@@ -36,4 +37,17 @@ export function initials(description: string): string {
   const [a, b] = words
   if (!a) return '·'
   return (b ? a.charAt(0) + b.charAt(0) : a.slice(0, 2)).toUpperCase()
+}
+
+const NEUTRAL_LABEL: Partial<Record<NonNullable<StatementTx['kind']>, string>> = {
+  transfer: 'Transferência',
+  card_payment: 'Pagamento de fatura',
+  investment_in: 'Caixinha',
+  investment_out: 'Investimento',
+}
+
+/** Como a linha aparece: tipos que não são gasto/entrada ficam neutros e com rótulo no lugar da categoria. */
+export function rowDisplay(t: Pick<StatementTx, 'kind' | 'isYield' | 'categoryName'>): { neutral: boolean; label: string | null; pending: boolean } {
+  const label = t.kind ? (NEUTRAL_LABEL[t.kind] ?? null) : null
+  return { neutral: t.isYield || label !== null, label: label ?? t.categoryName, pending: t.kind === 'pending_review' }
 }

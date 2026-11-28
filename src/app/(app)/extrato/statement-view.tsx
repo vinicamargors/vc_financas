@@ -7,7 +7,7 @@ import { Money } from '@/components/money'
 import { formatDayLabel } from '@/lib/format/date'
 import type { StatementPage } from '@/lib/queries/statement'
 import { mergeGroups } from '@/lib/queries/statement-page'
-import { FILTERS, initials, type Filter } from './statement-filter'
+import { FILTERS, initials, rowDisplay, type Filter } from './statement-filter'
 import { loadMoreStatement } from './actions'
 
 function dayLabel(date: string, today: string, yesterday: string): string {
@@ -115,7 +115,7 @@ export function StatementView({ initial, today, yesterday }: { initial: Statemen
               <Money cents={day.totalCents} sign />
             </h2>
             <ul className="tx-list">
-              {day.items.map((t) => (
+              {day.items.map((t) => [t, rowDisplay(t)] as const).map(([t, d]) => (
                 <li key={t.id} className="tx">
                   <span className="ic" aria-hidden="true">
                     {initials(t.description)}
@@ -126,13 +126,14 @@ export function StatementView({ initial, today, yesterday }: { initial: Statemen
                       {t.installmentNumber && t.installmentTotal ? (
                         <span className="tag">{`${t.installmentNumber}/${t.installmentTotal}`}</span>
                       ) : null}
+                      {t.kind === 'pending_review' ? <span className="tag warn">a confirmar</span> : null}
                     </b>
                     <span>
                       {t.accountLabel ? <BankMark institution={t.accountLabel} logoUrl={t.logoUrl} /> : null}
-                      {[t.accountLabel, t.cardLast4 ? `cartão •••• ${t.cardLast4}` : null, t.occurredAt ? formatTime(t.occurredAt) : null].filter(Boolean).join(' · ')}
+                      {[d.label, t.accountLabel, t.cardLast4 ? `cartão •••• ${t.cardLast4}` : null, t.occurredAt ? formatTime(t.occurredAt) : null].filter(Boolean).join(' · ')}
                     </span>
                   </span>
-                  <Money cents={t.amountCents} sign className={`am${t.isYield ? ' neu' : t.amountCents > 0 ? ' in' : ''}`} />
+                  <Money cents={t.amountCents} sign className={`am${d.neutral ? ' neu' : t.amountCents > 0 ? ' in' : ''}`} />
                 </li>
               ))}
             </ul>

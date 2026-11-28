@@ -135,5 +135,11 @@ export async function syncNowAction(): Promise<void> {
       console.error(`sincronizar agora falhou: ${safeErrorMessage(e)}`)
     }
   }
+  try {
+    await sync.reclassifyAll(user.id)
+  } catch (e) {
+    failed += 1
+    console.error(`reclassificar falhou: ${safeErrorMessage(e)}`)
+  }
   redirect(`${PAGE}?sync=${failed === 0 ? 'ok' : 'erro'}`)
 }

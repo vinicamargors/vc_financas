@@ -9,6 +9,10 @@ import {
   type TransactionRow,
 } from '@/lib/pluggy/map'
 import { toLocalDate } from '@/lib/format/date'
+import { onlyDigits } from '@/lib/classify/normalize'
+import { matchShortcuts } from '@/lib/shortcut/merge'
+import { classifyWindow, minusDays } from './classification'
+import { safeErrorMessage } from './safe-error'
 import type { SyncRepo } from './repo'
 
 export interface SyncDeps {
@@ -18,6 +22,8 @@ export interface SyncDeps {
   today: string
   /** Relógio para `last_synced_at`; padrão `new Date()`. */
   now?: () => Date
+  /** Log sanitizado; padrão `console.error`. */
+  log?: (message: string) => void
 }
 
 export interface SyncResult {
@@ -26,17 +32,12 @@ export interface SyncResult {
   status: string
 }
 
-const DAY_MS = 86_400_000
 const INITIAL_DAYS = 90
 const OVERLAP_DAYS = 3
 /** Status em que não há dados novos a buscar. */
 const MERCADO_PAGO_RE = /mercado\s*pago/i
 const BLOCKED_STATUSES = new Set(['LOGIN_ERROR', 'WAITING_USER_INPUT'])
 
-/** `YYYY-MM-DD` menos `days` dias (aritmética em meio-dia UTC, sem efeito de DST). */
-function minusDays(date: string, days: number): string {
-  return new Date(Date.parse(`${date}T12:00:00Z`) - days * DAY_MS).toISOString().slice(0, 10)
-}
 
 /** Erros do SDK carregam a requisição (headers com segredos): só propagamos código/mensagem. */
 async function guarded<T>(p: Promise<T>): Promise<T> {
@@ -147,12 +148,37 @@ export async function syncItem(deps: SyncDeps, userId: string, itemId: string): 
     await repo.upsertBalanceSnapshot(userId, row.id, today, accountRows[i].balanceCents)
   }
 
+  // Dono das contas (CPF/CNPJ e nome): só para classificar transferências próprias. Nunca vai para log.
+  const ownerDocs = [...new Set(accounts.map((a) => onlyDigits(a.taxNumber)).filter(Boolean))]
+  const ownerNames = [...new Set(accounts.map((a) => a.owner?.trim() ?? '').filter(Boolean))]
+  // Os lançamentos já estão gravados: falha aqui só registra; o próximo sync/reclassificação conserta.
+  try {
+    await mergeShortcuts(repo, userId, minusDays(from, OVERLAP_DAYS), today)
+  } catch (e) {
+    ;(deps.log ?? console.error)(`fusão com o Atalho falhou (item ${itemId}): ${safeErrorMessage(e)}`)
+  }
+  try {
+    await repo.mergeOwnerIdentity(userId, ownerDocs, ownerNames)
+    await classifyWindow(repo, userId, { from: minusDays(from, OVERLAP_DAYS), to: today, ownerDocs, ownerNames })
+  } catch (e) {
+    ;(deps.log ?? console.error)(`classificação falhou (item ${itemId}): ${safeErrorMessage(e)}`)
+  }
+
   await repo.upsertConnection({ ...base, lastSyncedAt: now.toISOString() })
   return {
     accounts: accounts.length,
     transactions: txCount,
     status: item.status,
   }
+}
+
+/** Atalho do iPhone: a compra que chega pela Pluggy substitui a linha provisória do Atalho. */
+export async function mergeShortcuts(repo: SyncRepo, userId: string, from: string, to: string): Promise<number> {
+  const { shortcuts, candidates, taken } = await repo.loadShortcutMerge(userId, from, to)
+  if (shortcuts.length === 0) return 0
+  const matches = matchShortcuts(shortcuts, candidates, new Set(taken))
+  if (matches.length) await repo.applyShortcutMerges(userId, matches)
+  return matches.length
 }
 
 export async function deleteTransactions(deps: Pick<SyncDeps, 'repo'>, userId: string, externalIds: string[]): Promise<void> {

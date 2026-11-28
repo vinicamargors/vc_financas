@@ -286,25 +286,30 @@ a {
   place-items: center;
 }
 
+.act .act-icon {
+  position: relative;
+}
+
+.act .badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--warn);
+  color: #0b0b0c;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: grid;
+  place-items: center;
+}
+
 .act .act-icon svg {
   width: 22px;
   height: 22px;
-}
-
-.act[aria-disabled="true"] {
-  color: var(--muted);
-  cursor: default;
-}
-
-.act[aria-disabled="true"] .act-icon {
-  color: var(--faint);
-}
-
-.act .soon {
-  display: block;
-  font-size: 0.65rem;
-  color: var(--faint);
-  margin-top: -6px;
 }
 
 .sep {
@@ -586,6 +591,27 @@ a {
   vertical-align: 1px;
 }
 
+.tag.warn {
+  background: transparent;
+  color: var(--warn);
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
+.spend {
+  padding: 0 20px 6px;
+}
+
+.spend .val {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.spend .pend {
+  margin-left: 8px;
+  font-size: 0.85rem;
+  color: var(--warn);
+}
+
 .empty {
   padding: 24px 20px;
   color: var(--muted);
@@ -724,6 +750,17 @@ a {
   margin-top: 6px;
   text-align: center;
   cursor: pointer;
+}
+
+a.btn {
+  text-decoration: none;
+}
+
+.step ul {
+  margin: 0 0 16px;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .btn:disabled {
@@ -990,4 +1027,120 @@ a {
     animation: none;
     background: var(--surface-2);
   }
+}
+
+/* Revisar */
+.rv-section {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 20px;
+  margin: 0;
+}
+
+.rv-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.rv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 20px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px 16px;
+}
+
+.rv-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rv-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-amount {
+  margin-left: auto;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rv-meta,
+.rv-note {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.rv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.rv-chips {
+  padding: 4px 0;
+  flex-wrap: wrap;
+}
+
+.rv-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 4px 0;
+}
+
+.rv-input:focus {
+  outline: none;
+  border-bottom-color: var(--fg);
+}
+
+.rv-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.rv-check input {
+  accent-color: var(--pill);
+}
+
+.rv-save {
+  align-self: flex-start;
+  border: 0;
+  border-radius: 99px;
+  background: var(--pill);
+  color: var(--pill-fg);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.rv-save:disabled,
+.rv-actions .chip:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
