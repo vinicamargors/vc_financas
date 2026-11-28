@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireUser } from '@/lib/supabase/server'
 import { saveCredentialsAction, syncNowAction } from './actions'
+import { RemoveConnection } from './remove-connection'
 import { ConnectWidget } from './connect-widget'
 import { SyncButton } from './sync-button'
 
@@ -12,6 +13,14 @@ const ERROR_MESSAGES: Record<string, string> = {
   chave: 'CREDENTIALS_KEY inválida na Vercel. Gere com: openssl rand -base64 32',
   banco: 'Não foi possível salvar no Supabase. Confira SUPABASE_SERVICE_ROLE_KEY na Vercel.',
   falha: 'Não foi possível concluir a configuração. Tente de novo.',
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  UPDATED: 'Atualizada',
+  UPDATING: 'Atualizando',
+  LOGIN_ERROR: 'Erro de login',
+  OUTDATED: 'Desatualizada',
+  WAITING_USER_INPUT: 'Aguardando você',
 }
 
 export const metadata = { title: 'Conectar bancos' }
@@ -29,12 +38,15 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
   const hasCredentials = Boolean(data)
   const { data: conns } = await createAdminSupabase()
     .from('connections')
-    .select('bank_data_at')
+    .select('id, connector_name, status, bank_data_at')
     .eq('user_id', user.id)
-    .not('bank_data_at', 'is', null)
-    .order('bank_data_at', { ascending: true })
-    .limit(1)
-  const bankDataAt = (conns?.[0]?.bank_data_at as string | undefined) ?? null
+    .order('created_at', { ascending: true })
+  const list = conns ?? []
+  const bankDataAt =
+    list
+      .map((c) => c.bank_data_at as string | null)
+      .filter((d): d is string => Boolean(d))
+      .sort()[0] ?? null
 
   return (
     <main className="flow">
@@ -119,6 +131,35 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
           </form>
         </section>
       )}
+
+      {list.length > 0 && (
+        <section className="step">
+          <h2>Conexões</h2>
+          <ul className="conn-list">
+            {list.map((c) => (
+              <li key={c.id as string} className="conn-row">
+                <div>
+                  <strong>{c.connector_name as string}</strong>
+                  <small>
+                    {STATUS_LABEL[c.status as string] ?? 'Status desconhecido'}
+                    {c.bank_data_at ? ` · dados do banco de ${formatDayLabel(toLocalDate(c.bank_data_at as string))}` : ''}
+                  </small>
+                </div>
+                <RemoveConnection connectionId={c.id as string} name={c.connector_name as string} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="step">
+        <h2>Ciclo do salário</h2>
+        <p>Salário, compromissos e o resumo do Dia do pagamento.</p>
+        <p>
+          <Link href="/config/salario">Salário</Link> · <Link href="/config/compromissos">Compromissos</Link> ·{' '}
+          <Link href="/pagamento">Dia do pagamento</Link>
+        </p>
+      </section>
 
       <section className="step">
         <h2>Atalho do iPhone</h2>

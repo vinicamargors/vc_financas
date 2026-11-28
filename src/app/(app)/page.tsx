@@ -3,13 +3,17 @@ import { Money } from '@/components/money'
 import { BankMark } from '@/components/bank-mark'
 import { Icon, type IconName } from '@/components/icons'
 import { ConnectionStatus } from '@/components/connection-status'
-import { formatDayLabel, formatTime, toLocalDate } from '@/lib/format/date'
+import { formatDayLabel, formatLocalDayMonth, formatTime, toLocalDate } from '@/lib/format/date'
+import { showPaymentDay } from '@/lib/commitments/form'
+import { computeFree, type FreeResult } from '@/lib/cycle/free'
+import { loadCycleData, type CycleData } from '@/lib/queries/cycle'
 import { loadHomeData, oldestBankData, oldestHealthySync } from '@/lib/queries/balances'
 import { loadSavings, summarizeSavings } from '@/lib/queries/savings'
 import { getCdiAnnual } from '@/lib/cdi'
 import { loadRealSpending } from '@/lib/queries/spending'
 import { loadReview, reviewCount } from '@/lib/queries/review'
 import { createServerSupabase, requireUser } from '@/lib/supabase/server'
+import { safeErrorMessage } from '@/lib/sync/safe-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,6 +67,71 @@ function ReviewTile({ count }: { count: number }) {
   )
 }
 
+function SalaryTile() {
+  return (
+    <div className="tiles">
+      <Link href="/config/salario" className="tile">
+        <span className="n neutral" aria-hidden="true">
+          <Icon name="pie" />
+        </span>
+        <div>
+          <span className="t">Salário</span>
+          <span className="m">Configure seu salário para calcular o livre por dia</span>
+        </div>
+        <span className="go">Configurar</span>
+      </Link>
+    </div>
+  )
+}
+
+function FreeHero({ data, free }: { data: CycleData; free: FreeResult }) {
+  const { cycle } = data
+  const over = free.freeCents < 0
+  return (
+    <section className="balance" aria-labelledby="livre-titulo">
+      <h1 id="livre-titulo" className="label">
+        Livre por dia
+        {cycle.late && <span className="tag warn">salário atrasado</span>}
+      </h1>
+      {over ? (
+        <p className="big bad">
+          <Money cents={-free.freeCents} currency="small" />
+          <span className="over">acima do planejado</span>
+        </p>
+      ) : (
+        <>
+          <p className="big">
+            <Money cents={free.freePerDayCents} currency="small" />
+          </p>
+          <p className="sub">
+            <Money cents={free.freeCents} /> livre até {formatLocalDayMonth(cycle.end)}
+          </p>
+        </>
+      )}
+      <p className="sub">
+        Cartão neste ciclo: <Money cents={free.cardThisCycleCents} /> → próximo salário
+      </p>
+    </section>
+  )
+}
+
+function PaymentDayTile() {
+  return (
+    <div className="tiles">
+      <Link href="/pagamento" className="tile">
+        <span className="n neutral" aria-hidden="true">
+          <Icon name="check" />
+        </span>
+        <div>
+          <span className="t">Dia do pagamento</span>
+          <span className="m">Salário, compromissos e o que fica livre</span>
+        </div>
+        <span className="go">Ver</span>
+      </Link>
+    </div>
+  )
+}
+
 function SavingsBlock({ totalCents, dailyYieldCents }: { totalCents: number; dailyYieldCents: number | null }) {
   return (
     <>
@@ -87,7 +156,7 @@ function SavingsBlock({ totalCents, dailyYieldCents }: { totalCents: number; dai
 export default async function InicioPage() {
   const user = await requireUser()
   const supabase = await createServerSupabase()
-  const [{ connections, summary, logos }, profile, savings, cdi, review, spend] = await Promise.all([
+  const [{ connections, summary, logos }, profile, savings, cdi, review, spend, cycleData] = await Promise.all([
     loadHomeData(),
     supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
     // Caixinhas são complemento: falha aqui não derruba o Início.
@@ -97,7 +166,15 @@ export default async function InicioPage() {
     loadReview().catch(() => null),
     // Gasto real também é complemento.
     loadRealSpending().catch(() => null),
+    // Ciclo também é complemento: sem ele, o saldo continua aparecendo.
+    loadCycleData(user.id).catch((e: unknown) => {
+      console.error(`carregar ciclo falhou: ${safeErrorMessage(e)}`)
+      return null
+    }),
   ])
+  const today = toLocalDate(new Date())
+  const needsSalary = cycleData != null && !cycleData.hasSalarySource
+  const free = cycleData?.hasSalarySource ? computeFree({ ...cycleData, today }) : null
   const name = profile.data?.display_name?.trim()
   const hello = <p className="hello">{name ? `Olá, ${name}` : 'Olá'}</p>
 
@@ -128,10 +205,19 @@ export default async function InicioPage() {
   return (
     <main>
       {hello}
-      <section className="balance" aria-labelledby="saldo-titulo">
-        <h1 id="saldo-titulo" className="label">
+      {cycleData && free ? (
+        <FreeHero data={cycleData} free={free} />
+      ) : (
+        <>
+          <h1 className="sr-only">Início</h1>
+          {needsSalary && <SalaryTile />}
+        </>
+      )}
+      {cycleData && showPaymentDay(cycleData.cycle, today) && <PaymentDayTile />}
+      <section className="balance secondary" aria-labelledby="saldo-titulo">
+        <h2 id="saldo-titulo" className="label">
           Saldo em conta
-        </h1>
+        </h2>
         <p className="big">
           <Money cents={summary.totalCents} currency="small" />
         </p>

@@ -106,6 +106,27 @@ describe('classificação na sincronização', () => {
     expect(repo.dump().transactions[0].kind).toBe('transfer')
   })
 
+  it('entrada do pagador vira renda com a fonte; linha do usuário fica; fonte removida some no reclassifyAll', async () => {
+    const repo = createMemoryRepo()
+    const sal = makeTransaction({ id: 'sal', description: 'TED recebida', type: 'CREDIT', amount: 8500, paymentData: { payer: { documentNumber: { type: 'CNPJ', value: '12.345.678/0001-90' } } } } as Partial<Transaction>)
+    const plr = makeTransaction({ id: 'plr', description: 'Credito PLR Acme Ltda', type: 'CREDIT', amount: 3200 })
+    const mine = makeTransaction({ id: 'mine', description: 'Credito Acme Ltda', type: 'CREDIT', amount: 100 })
+    await syncItem({ source: source([makeAccount({ id: 'acc-1' })], { 'acc-1': [sal, plr, mine] }), repo, today, now }, U, 'item-1')
+    const byExt = () => new Map(repo.dump().transactions.map((t) => [t.externalId, t]))
+    repo.patch(byExt().get('mine')!.id, { classifiedBy: 'user', kind: 'refund' })
+    repo.seed({ incomeSources: [{ id: 'src-1', userId: U, payerDoc: '12345678000190', payerName: 'Acme Ltda' }] })
+    await reclassifyAll({ repo, today }, U)
+    expect(byExt().get('sal')).toMatchObject({ kind: 'income', incomeSourceId: 'src-1' })
+    expect(byExt().get('plr')).toMatchObject({ kind: 'income', incomeSourceId: 'src-1' })
+    expect(byExt().get('mine')).toMatchObject({ kind: 'refund', classifiedBy: 'user' })
+    expect(byExt().get('mine')?.incomeSourceId ?? null).toBeNull()
+    expect(await reclassifyAll({ repo, today }, U)).toEqual({ changed: 0 })
+
+    repo.removeIncomeSource('src-1')
+    await reclassifyAll({ repo, today }, U)
+    expect(byExt().get('sal')).toMatchObject({ kind: 'income', incomeSourceId: null })
+  })
+
   it('identidade do dono acumula (união) entre syncs', async () => {
     const repo = createMemoryRepo()
     await syncItem({ source: source([makeAccount({ id: 'acc-1', owner: 'A B C D E F G', taxNumber: CPF })], {}), repo, today, now }, U, 'item-1')

@@ -33,3 +33,9 @@ export function isDateOnly(iso: string | Date): boolean {
 export function transactionDate(iso: string | Date): string {
   return isDateOnly(iso) ? new Date(iso).toISOString().slice(0, 10) : toLocalDate(iso)
 }
+
+/** "dd/MM" de uma data local `YYYY-MM-DD`. */
+export function formatLocalDayMonth(localDate: string): string {
+  const [, m, d] = localDate.split('-')
+  return `${d}/${m}`
+}

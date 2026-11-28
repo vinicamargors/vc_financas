@@ -1,4 +1,4 @@
-import type { Kind, Rule } from '@/lib/classify/classify'
+import type { IncomeSourceMatch, Kind, Rule } from '@/lib/classify/classify'
 import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
 import type { ClassificationChanges, ConnectionRow, SyncRepo } from './repo'
 
@@ -13,6 +13,7 @@ export type StoredTransaction = Omit<TransactionRow, 'kind'> & {
   classifiedBy: 'auto' | 'user'
   categoryId: string | null
   merchantId: string | null
+  incomeSourceId?: string | null
   linkedTransactionId: string | null
   createdAt: string
 }
@@ -25,6 +26,7 @@ export interface Seed {
   categories?: { id: string; userId: string; name: string }[]
   merchants?: { id: string; userId: string; categoryId: string | null }[]
   rules?: (Rule & { userId: string })[]
+  incomeSources?: (IncomeSourceMatch & { userId: string })[]
   profileCpf?: Record<string, string>
 }
 export type StoredBox = SavingsBoxRow & { id: string }
@@ -48,6 +50,8 @@ export function createMemoryRepo(): SyncRepo & {
   patch(id: string, p: Partial<StoredTransaction>): void
   /** Grava uma linha do Atalho (sem external_id) e devolve o id. */
   insertShortcut(r: { userId: string; accountId: string; date: string; amountCents: number; descriptionRaw: string }): string
+  /** Remove só a fonte (as linhas ficam com o id velho, para testar que a reclassificação limpa). */
+  removeIncomeSource(id: string): void
   calls: { applyClassification: ClassificationChanges[] }
   dump(): {
     profiles: Map<string, MemoryProfile>
@@ -69,6 +73,7 @@ export function createMemoryRepo(): SyncRepo & {
   const categories: NonNullable<Seed['categories']> = []
   const merchants: NonNullable<Seed['merchants']> = []
   const rules: NonNullable<Seed['rules']> = []
+  const incomeSources: NonNullable<Seed['incomeSources']> = []
   const calls = { applyClassification: [] as ClassificationChanges[] }
   const txById = (id: string) => [...transactions.values()].find((t) => t.id === id)
   let seq = 0
@@ -167,11 +172,13 @@ export function createMemoryRepo(): SyncRepo & {
           linkedTransactionId: t.linkedTransactionId,
           categoryId: t.categoryId,
           merchantId: t.merchantId,
+          incomeSourceId: t.incomeSourceId ?? null,
         })),
         accounts: [...accounts.values()].filter((a) => a.userId === userId).map((a) => ({ id: a.id, type: classifierAccountType(a.type, a.externalId) })),
         rules: rules.filter((r) => r.userId === userId).map((r) => ({ matchField: r.matchField, pattern: r.pattern, merchantId: r.merchantId, categoryId: r.categoryId, kind: r.kind })),
         merchants: merchants.filter((m) => m.userId === userId).map((m) => ({ id: m.id, categoryId: m.categoryId })),
         categories: categories.filter((c) => c.userId === userId).map((c) => ({ id: c.id, name: c.name })),
+        incomeSources: incomeSources.filter((x) => x.userId === userId).map(({ id, payerDoc, payerName }) => ({ id, payerDoc, payerName })),
         ownerCpf: profiles.get(userId)?.cpf ?? null,
         ownerDocs: profiles.get(userId)?.ownerDocs ?? [],
         ownerNames: profiles.get(userId)?.ownerNames ?? [],
@@ -193,7 +200,7 @@ export function createMemoryRepo(): SyncRepo & {
       }
       for (const d of changes.decisions) {
         const t = auto(d.id)
-        if (t) Object.assign(t, { kind: d.kind, categoryId: d.categoryId, merchantId: d.merchantId })
+        if (t) Object.assign(t, { kind: d.kind, categoryId: d.categoryId, merchantId: d.merchantId, incomeSourceId: d.incomeSourceId })
       }
     },
     async loadShortcutMerge(userId, from, to) {
@@ -245,7 +252,12 @@ export function createMemoryRepo(): SyncRepo & {
       categories.push(...(s.categories ?? []))
       merchants.push(...(s.merchants ?? []))
       rules.push(...(s.rules ?? []))
+      incomeSources.push(...(s.incomeSources ?? []))
       for (const [u, cpf] of Object.entries(s.profileCpf ?? {})) profiles.set(u, { cpf, ownerDocs: [], ownerNames: [] })
+    },
+    removeIncomeSource(id) {
+      const i = incomeSources.findIndex((x) => x.id === id)
+      if (i >= 0) incomeSources.splice(i, 1)
     },
     patch(id, p) {
       const t = txById(id)
