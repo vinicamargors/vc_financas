@@ -43,6 +43,14 @@ do $$ begin
       foreign key (income_source_id, user_id) references public.income_sources (id, user_id)
       match simple on delete set null (income_source_id);
   end if;
+  if not exists (select 1 from pg_constraint where conname = 'income_sources_fixed_day_required' and conrelid = 'public.income_sources'::regclass) then
+    alter table public.income_sources add constraint income_sources_fixed_day_required
+      check (date_rule <> 'fixed_day' or fixed_day is not null);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'commitments_value_check' and conrelid = 'public.commitments'::regclass) then
+    alter table public.commitments add constraint commitments_value_check
+      check (case kind when 'percent_of_income' then percent is not null else amount_cents is not null end);
+  end if;
 end $$;
 
 create index if not exists transactions_income_source_idx on public.transactions (income_source_id);
