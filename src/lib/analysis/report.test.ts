@@ -57,9 +57,12 @@ describe('buildCycleReport', () => {
       tx('2026-11-06', 5000, 'refund', 'card'),
       tx('2026-11-07', -3000, 'expense', 'vr'),
     ])
-    expect(r.cashOutCents).toBe(10000 + 30000 + 2000 - 1000)
+    expect(r.cashOutCents).toBe(10000 - 1000)
     expect(r.cardCents).toBe(15000)
+    expect(r.benefitCents).toBe(3000)
+    expect(r.cashOutCents + r.cardCents + r.benefitCents).toBe(r.spendingCents)
     expect(r.spendingCents).toBe(10000 - 1000 + 15000 + 3000)
+    expect(r.cardPaidCents).toBe(30000)
     expect(r.pendingCents).toBe(2000)
   })
   it('caixinhas: aportes − resgates (rendimento fora)', () => {
@@ -79,6 +82,7 @@ describe('buildCycleReport', () => {
     ])
     expect(r.topPlaces[0]).toMatchObject({ place: 'Zaffari', totalCents: 10000 })
     expect(r.prev.spendingCents).toBe(7000)
+    expect(r.prev).toMatchObject({ days: 28, previousDays: 28 })
     expect(r.spendingCents).toBe(14000)
   })
   it('compromissos do ciclo com status', () => {
@@ -93,5 +97,12 @@ describe('buildCycleReport', () => {
       ['Aluguel', 'todo'],
     ])
     expect(r.commitmentsDone).toBe(1)
+  })
+})
+
+describe('janela anterior mais curta', () => {
+  it('informa o tamanho real do anterior', () => {
+    const r = report([], { compare: { current: cycle, previous: { start: prevCycle.start, end: '2026-10-08' } } })
+    expect(r.prev).toMatchObject({ days: 28, previousDays: 10 })
   })
 })

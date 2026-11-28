@@ -1,7 +1,7 @@
 'use client'
 
 import { buildBars, type WeekInOut } from '@/lib/analysis/calendar'
-import { formatBRL } from '@/lib/format/money'
+import { formatBRL, formatCompactBRL } from '@/lib/format/money'
 import { formatLocalDayMonth } from '@/lib/format/date'
 import { useHideValues } from './hide-values'
 
@@ -9,13 +9,6 @@ const W = 340
 const H = 180
 const BOX = { width: W, height: H, padTop: 10, padBottom: 22, padLeft: 44, padRight: 8 }
 
-/** Rótulo curto do eixo: "1,5 mil". */
-function compact(cents: number, hidden: boolean): string {
-  if (hidden) return '•••'
-  const reais = cents / 100
-  if (reais >= 1000) return `${(reais / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`
-  return reais.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
-}
 
 /** Barras de entradas (verde) e saídas (cor do texto) por semana, escala a partir de zero. */
 export function WeeklyChart({ weeks }: { weeks: WeekInOut[] }) {
@@ -31,7 +24,7 @@ export function WeeklyChart({ weeks }: { weeks: WeekInOut[] }) {
           <g key={t}>
             <line className="grid" x1={BOX.padLeft} x2={W - BOX.padRight} y1={c.y(t)} y2={c.y(t)} />
             <text className="tick" x={BOX.padLeft - 6} y={c.y(t) + 3} textAnchor="end">
-              {compact(t, hidden)}
+              {formatCompactBRL(t, { hidden })}
             </text>
           </g>
         ))}

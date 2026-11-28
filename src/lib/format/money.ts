@@ -34,3 +34,14 @@ export function formatBRL(
   }
   return normalizeSpaces(fmt(brl, negative ? `-${decimal}` : decimal))
 }
+
+/** Valor curto, sem "R$" e sem centavos: "46", "1,2 mil", "2,5 mi". Para espaços pequenos (calendário, eixos). */
+export function formatCompactBRL(cents: number, opts: { hidden?: boolean } = {}): string {
+  if (opts.hidden) return '•••'
+  const reais = cents / 100
+  const abs = Math.abs(reais)
+  const one = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+  if (abs >= 1_000_000) return `${one(reais / 1_000_000)} mi`
+  if (abs >= 1000) return `${one(reais / 1000)} mil`
+  return reais.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
+}

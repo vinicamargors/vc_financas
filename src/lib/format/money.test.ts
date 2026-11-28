@@ -24,3 +24,14 @@ describe('formatBRL', () => {
     expect(formatBRL(0)).toBe('R$ 0,00')
   })
 })
+
+describe('formatCompactBRL', () => {
+  it('abrevia milhares e milhões, sem centavos', async () => {
+    const { formatCompactBRL } = await import('./money')
+    expect(formatCompactBRL(123456)).toBe('1,2 mil')
+    expect(formatCompactBRL(99900)).toBe('999')
+    expect(formatCompactBRL(4550)).toBe('46')
+    expect(formatCompactBRL(250_000_000)).toBe('2,5 mi')
+    expect(formatCompactBRL(123456, { hidden: true })).toBe('•••')
+  })
+})

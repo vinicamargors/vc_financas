@@ -10,9 +10,11 @@ const MONTH_RE = /^(\d{4})-(\d{2})$/
 export function parseMonth(v: string | undefined, today: string): string {
   const current = today.slice(0, 7)
   const m = v ? MONTH_RE.exec(v) : null
-  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12 || v! > current) return current
+  if (!m || Number(m[1]) < 2000 || Number(m[2]) < 1 || Number(m[2]) > 12 || v! > current) return current
   return v!
 }
+
+export const MIN_MONTH = '2000-01'
 
 /** Mês anterior/seguinte em `YYYY-MM`. */
 export function shiftMonth(month: string, delta: number): string {

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Money } from '@/components/money'
 import { PeriodPicker } from '@/components/period-picker'
 import { byCategory, type ByCategory, type CategoryRow } from '@/lib/analysis/by-category'
-import { comparison, parsePeriodSel, periodDays, periodQuery, resolvePeriod, type PeriodKind } from '@/lib/analysis/period'
+import { comparable, comparison, parsePeriodSel, periodDays, periodQuery, resolvePeriod, type PeriodKind } from '@/lib/analysis/period'
 import { loadAnalysisContext, loadCategories, loadTxs } from '@/lib/queries/analysis'
 import { requireUser } from '@/lib/supabase/server'
 import { safeErrorMessage } from '@/lib/sync/safe-error'
@@ -49,7 +49,8 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
     console.error(`carregar gastos falhou: ${safeErrorMessage(e)}`)
   }
   const max = data ? Math.max(0, ...data.rows.map((r) => r.totalCents)) : 0
-  const totalDelta = data && data.prevTotalCents > 0 ? Math.round(((data.totalCents - data.prevTotalCents) / data.prevTotalCents) * 100) : null
+  const fair = comparable(cmp)
+  const totalDelta = fair && data && data.prevTotalCents > 0 ? Math.round(((data.totalCents - data.prevTotalCents) / data.prevTotalCents) * 100) : null
 
   return (
     <main>
@@ -75,7 +76,15 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
               <Money cents={data.totalCents} currency="small" />
             </p>
             <p className="sub">
-              <Money cents={data.prevTotalCents} /> nos mesmos {cmp.days} {cmp.days === 1 ? 'dia' : 'dias'} do período anterior
+              {fair ? (
+                <>
+                  <Money cents={data.prevTotalCents} /> nos mesmos {cmp.days} {cmp.days === 1 ? 'dia' : 'dias'} do período anterior
+                </>
+              ) : (
+                <>
+                  <Money cents={data.prevTotalCents} /> no período anterior (anterior: {cmp.previousDays} {cmp.previousDays === 1 ? 'dia' : 'dias'}; este: {cmp.days})
+                </>
+              )}
               {totalDelta != null && (
                 <>
                   {' · '}
@@ -107,7 +116,7 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
                     <span className="cat-meta">
                       {r.count > 0 && <span>{r.count === 1 ? '1 compra' : `${r.count} compras`}</span>}
                       {r.topPlace && <span>maior: {r.topPlace}</span>}
-                      <Delta pct={r.deltaPct} />
+                      <Delta pct={fair ? r.deltaPct : null} />
                       {r.limitCents != null && (
                         <span className={r.level === 'ok' ? undefined : r.level}>
                           {r.usagePct}% de <Money cents={r.limitCents} />

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Money } from '@/components/money'
 import { buildCycleReport, type CycleReport } from '@/lib/analysis/report'
-import { comparison, isLocalDate, resolvePeriod } from '@/lib/analysis/period'
+import { MIN_DATE, comparison, isLocalDate, resolvePeriod } from '@/lib/analysis/period'
 import { addDays } from '@/lib/cycle/businessDays'
 import type { CommitmentInput, CommitmentStatus } from '@/lib/cycle/free'
 import { formatLocalDayMonth as dm } from '@/lib/format/date'
@@ -18,7 +18,8 @@ function pct(cur: number, prev: number): number | null {
   return prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null
 }
 
-function Delta({ cur, prev, upIsBad }: { cur: number; prev: number; upIsBad: boolean }) {
+function Delta({ cur, prev, upIsBad, fair }: { cur: number; prev: number; upIsBad: boolean; fair: boolean }) {
+  if (!fair) return null
   const p = pct(cur, prev)
   if (p == null) return <span className="faint">sem base</span>
   if (p === 0) return <span className="faint">igual</span>
@@ -37,7 +38,9 @@ export default async function RelatorioPage({ searchParams }: { searchParams: Pr
   const nextRef = addDays(cycle.end, 1)
   const inProgress = cycle.end >= ctx.today
 
+  const hasPrev = addDays(cycle.start, -1) >= MIN_DATE
   let report: CycleReport | null = null
+  let commitmentsUnavailable = false
   try {
     const [categories, txs, commitments] = await Promise.all([
       loadCategories(ctx.db),
@@ -50,6 +53,7 @@ export default async function RelatorioPage({ searchParams }: { searchParams: Pr
         .order('sort')
         .order('created_at'),
     ])
+    commitmentsUnavailable = !!commitments.error
     report = buildCycleReport({
       cycle,
       prevCycle,
@@ -79,9 +83,13 @@ export default async function RelatorioPage({ searchParams }: { searchParams: Pr
     <main className="flow">
       <h1 className="title">Relatório do ciclo</h1>
       <div className="period-nav">
-        <Link href={`/relatorio?ciclo=${prevCycle.start}`} className="period-step" aria-label="Ciclo anterior">
-          ‹
-        </Link>
+        {hasPrev ? (
+          <Link href={`/relatorio?ciclo=${prevCycle.start}`} className="period-step" aria-label="Ciclo anterior">
+            ‹
+          </Link>
+        ) : (
+          <span className="period-step" aria-hidden="true" />
+        )}
         <span className="period-label">
           {`${dm(cycle.start)} – ${dm(cycle.end)}`}
           {inProgress && <span className="tag">em andamento</span>}
@@ -127,8 +135,16 @@ export default async function RelatorioPage({ searchParams }: { searchParams: Pr
                 <Money cents={report.cardCents} />
               </li>
               <li>
-                <span>Gasto real</span>
+                <span>VR</span>
+                <Money cents={report.benefitCents} />
+              </li>
+              <li>
+                <span>Gasto real (caixa + cartão + VR)</span>
                 <Money cents={report.spendingCents} />
+              </li>
+              <li>
+                <span>Faturas pagas (fora do gasto)</span>
+                <Money cents={report.cardPaidCents} />
               </li>
               {report.pendingCents > 0 && (
                 <li>
@@ -146,21 +162,25 @@ export default async function RelatorioPage({ searchParams }: { searchParams: Pr
           <section className="step">
             <h2>Comparação com o ciclo anterior</h2>
             <p className="faint">
-              {inProgress ? `Os ${report.prev.days} primeiros dias de cada ciclo.` : 'Ciclo inteiro contra o anterior (mesmo número de dias).'}
+              {report.prev.previousDays < report.prev.days
+                ? `Este: ${report.prev.days} dias; anterior: ${report.prev.previousDays} dias. Sem variação em %, porque o anterior é mais curto.`
+                : inProgress
+                  ? `Os ${report.prev.days} primeiros dias de cada ciclo.`
+                  : `Os ${report.prev.days} dias deste ciclo contra os ${report.prev.previousDays} primeiros do anterior.`}
             </p>
             <ul className="kv">
               <li>
                 <span>Gasto real</span>
                 <span>
                   <Money cents={report.prev.spendingCents} /> → <Money cents={report.spendingCents} />{' '}
-                  <Delta cur={report.spendingCents} prev={report.prev.spendingCents} upIsBad />
+                  <Delta cur={report.spendingCents} prev={report.prev.spendingCents} upIsBad fair={report.prev.previousDays >= report.prev.days} />
                 </span>
               </li>
               <li>
                 <span>Entradas</span>
                 <span>
                   <Money cents={report.prev.incomeCents} /> → <Money cents={report.salaryCents + report.extrasCents} />{' '}
-                  <Delta cur={report.salaryCents + report.extrasCents} prev={report.prev.incomeCents} upIsBad={false} />
+                  <Delta cur={report.salaryCents + report.extrasCents} prev={report.prev.incomeCents} upIsBad={false} fair={report.prev.previousDays >= report.prev.days} />
                 </span>
               </li>
             </ul>
@@ -200,7 +220,11 @@ export default async function RelatorioPage({ searchParams }: { searchParams: Pr
 
           <section className="step">
             <h2>Compromissos cumpridos</h2>
-            {report.commitments.length === 0 ? (
+            {commitmentsUnavailable ? (
+              <p className="msg err" role="status">
+                Compromissos indisponíveis no momento.
+              </p>
+            ) : report.commitments.length === 0 ? (
               <p>
                 Nenhum compromisso. <Link href="/config/compromissos">Adicionar</Link>
               </p>

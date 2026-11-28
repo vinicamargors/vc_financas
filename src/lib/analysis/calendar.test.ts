@@ -8,6 +8,8 @@ describe('parseMonth', () => {
     expect(parseMonth('2026-13', '2026-11-12')).toBe('2026-11')
     expect(parseMonth('2027-01', '2026-11-12')).toBe('2026-11')
     expect(parseMonth('2026-02', '2026-11-12')).toBe('2026-02')
+    expect(parseMonth('1999-12', '2026-11-12')).toBe('2026-11')
+    expect(parseMonth('2000-01', '2026-11-12')).toBe('2000-01')
   })
 })
 

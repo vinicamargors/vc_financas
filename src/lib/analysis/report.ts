@@ -16,15 +16,20 @@ export type ReportTx = SpendTx & {
 export type CycleReport = {
   salaryCents: number
   extrasCents: number
-  /** Saiu do banco: despesas, faturas pagas e "a confirmar", menos estornos no banco. */
+  /** Gasto pago direto do banco (despesa − estorno). Caixa + cartão + VR = gasto real. */
   cashOutCents: number
   /** Compras no cartão menos estornos (VR fora). */
   cardCents: number
+  /** Compras no VR menos estornos. */
+  benefitCents: number
+  /** Faturas pagas pelo banco: saem do caixa, mas não são gasto (as compras já contam no cartão). */
+  cardPaidCents: number
   spendingCents: number
   pendingCents: number
   topCategories: CategoryRow[]
   topPlaces: { place: string; totalCents: number; count: number }[]
-  prev: { spendingCents: number; incomeCents: number; days: number }
+  /** `days`: dias comparados deste ciclo; `previousDays`: dias reais da janela anterior (pode ser menor). */
+  prev: { spendingCents: number; incomeCents: number; days: number; previousDays: number }
   /** Aportes − resgates das caixinhas. */
   savingsNetCents: number
   commitments: CommitmentResult[]
@@ -63,15 +68,21 @@ export function buildCycleReport(input: {
 
   let cashOutCents = 0
   let cardCents = 0
+  let benefitCents = 0
+  let cardPaid = 0
   let savingsNetCents = 0
   for (const t of cur) {
     const type = typeOf(t)
-    if (type === 'BENEFIT') continue
+    const spend = t.kind === 'expense' || t.kind === 'refund'
+    if (type === 'BENEFIT') {
+      if (spend) benefitCents -= t.amountCents
+      continue
+    }
     if (t.kind === 'investment_in' || t.kind === 'investment_out') savingsNetCents -= t.amountCents
     if (type === 'CREDIT') {
-      if (t.kind === 'expense' || t.kind === 'refund') cardCents -= t.amountCents
-    } else if (t.kind === 'expense' || t.kind === 'refund' || t.kind === 'card_payment') cashOutCents -= t.amountCents
-    else if ((t.kind === 'pending_review' || t.kind === null) && t.amountCents < 0) cashOutCents -= t.amountCents
+      if (spend) cardCents -= t.amountCents
+    } else if (spend) cashOutCents -= t.amountCents
+    else if (t.kind === 'card_payment' && t.amountCents < 0) cardPaid -= t.amountCents
   }
 
   const now = realSpending(cur)
@@ -108,11 +119,18 @@ export function buildCycleReport(input: {
     extrasCents: split.extrasCents,
     cashOutCents,
     cardCents,
+    benefitCents,
+    cardPaidCents: cardPaid,
     spendingCents: now.spendingCents,
     pendingCents: now.pendingCents,
     topCategories: cats.rows.filter((r) => r.totalCents > 0).slice(0, 5),
     topPlaces: byPlace(cur, 5),
-    prev: { spendingCents: cats.prevTotalCents, incomeCents: prevSplit.salaryCents + prevSplit.extrasCents, days: periodDays(compare.current) },
+    prev: {
+      spendingCents: cats.prevTotalCents,
+      incomeCents: prevSplit.salaryCents + prevSplit.extrasCents,
+      days: periodDays(compare.current),
+      previousDays: periodDays(compare.previous),
+    },
     savingsNetCents,
     commitments: free.commitments,
     commitmentsDone: free.commitments.filter((c) => c.status === 'done').length,

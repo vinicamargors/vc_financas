@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { Money } from '@/components/money'
+import { CompactMoney } from '@/components/compact-money'
 import { WeeklyChart } from '@/components/weekly-chart'
-import { dailySpend, heat, monthGrid, monthRange, parseMonth, shiftMonth, weeklyInOut } from '@/lib/analysis/calendar'
+import { MIN_MONTH, dailySpend, heat, monthGrid, monthRange, parseMonth, shiftMonth, weeklyInOut } from '@/lib/analysis/calendar'
 import { formatLocalDayMonth } from '@/lib/format/date'
 import { loadAnalysisContext, loadTxs, type AnalysisTx } from '@/lib/queries/analysis'
 import { requireUser } from '@/lib/supabase/server'
@@ -37,9 +38,13 @@ export default async function CalendarioPage({ searchParams }: { searchParams: P
     <main>
       <h1 className="title">Calendário</h1>
       <div className="period-nav">
-        <Link href={`/extrato/calendario?mes=${shiftMonth(month, -1)}`} className="period-step" aria-label="Mês anterior">
-          ‹
-        </Link>
+        {month > MIN_MONTH ? (
+          <Link href={`/extrato/calendario?mes=${shiftMonth(month, -1)}`} className="period-step" aria-label="Mês anterior">
+            ‹
+          </Link>
+        ) : (
+          <span className="period-step" aria-hidden="true" />
+        )}
         <span className="period-label">{`${MONTHS[m - 1]} de ${y}`}</span>
         {next <= ctx.today.slice(0, 7) ? (
           <Link href={`/extrato/calendario?mes=${next}`} className="period-step" aria-label="Próximo mês">
@@ -90,7 +95,7 @@ export default async function CalendarioPage({ searchParams }: { searchParams: P
                             aria-label={`${formatLocalDayMonth(d)}: ver lançamentos`}
                           >
                             <b>{Number(d.slice(8))}</b>
-                            {v > 0 && <Money cents={v} currency="none" className="cal-v" />}
+                            {v > 0 && <CompactMoney cents={v} className="cal-v" />}
                           </Link>
                         )}
                       </td>

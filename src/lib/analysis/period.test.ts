@@ -50,11 +50,11 @@ describe('resolvePeriod', () => {
 describe('comparison', () => {
   it('ciclo em andamento compara os mesmos dias do ciclo anterior', () => {
     const p = resolvePeriod({ kind: 'ciclo', ref: today }, cycleAt)
-    expect(comparison(p, today, cycleAt)).toEqual({ days: 16, current: { start: '2026-10-28', end: '2026-11-12' }, previous: { start: '2026-09-28', end: '2026-10-13' } })
+    expect(comparison(p, today, cycleAt)).toEqual({ days: 16, previousDays: 16, current: { start: '2026-10-28', end: '2026-11-12' }, previous: { start: '2026-09-28', end: '2026-10-13' } })
   })
   it('mês fechado compara com o mês anterior inteiro (cortado no fim dele)', () => {
     const p = resolvePeriod({ kind: 'mes', ref: '2026-03-10' }, cycleAt)
-    expect(comparison(p, today, cycleAt)).toEqual({ days: 31, current: { start: '2026-03-01', end: '2026-03-31' }, previous: { start: '2026-02-01', end: '2026-02-28' } })
+    expect(comparison(p, today, cycleAt)).toEqual({ days: 31, previousDays: 28, current: { start: '2026-03-01', end: '2026-03-31' }, previous: { start: '2026-02-01', end: '2026-02-28' } })
   })
   it('semana, dia, ano e personalizado', () => {
     expect(comparison(resolvePeriod({ kind: 'semana', ref: today }, cycleAt), today, cycleAt).previous).toEqual({ start: '2026-11-02', end: '2026-11-05' })
@@ -96,4 +96,23 @@ describe('limitForPeriod', () => {
     expect(limitForPeriod(60000, 365)).toBe(Math.round((60000 * 365 * 12) / 365.25))
   })
   it('sem limite', () => expect(limitForPeriod(null, 30)).toBeNull())
+})
+
+describe('limite inferior (ano 2000)', () => {
+  it('datas antes de 2000 são inválidas', async () => {
+    const { isLocalDate, MIN_DATE } = await import('./period')
+    expect(MIN_DATE).toBe('2000-01-01')
+    expect(isLocalDate('1999-12-31')).toBe(false)
+    expect(isLocalDate('0001-01-01')).toBe(false)
+    expect(isLocalDate('2000-01-01')).toBe(true)
+    expect(parsePeriodSel({ periodo: 'mes', ref: '1999-05-01' }, today).ref).toBe(today)
+    expect(parsePeriodSel({ periodo: 'livre', de: '1999-12-01', ate: '2000-01-10' }, today).kind).toBe('ciclo')
+  })
+  it('não volta antes de 2000', () => {
+    expect(shiftPeriod(resolvePeriod({ kind: 'mes', ref: '2000-01-15' }, cycleAt), -1, today)).toBeNull()
+    expect(shiftPeriod(resolvePeriod({ kind: 'ano', ref: '2000-06-01' }, cycleAt), -1, today)).toBeNull()
+    expect(shiftPeriod(resolvePeriod({ kind: 'mes', ref: '2000-02-15' }, cycleAt), -1, today)).toEqual({ kind: 'mes', ref: '2000-01-31' })
+    const livre = resolvePeriod({ kind: 'livre', ref: '2000-01-10', from: '2000-01-01', to: '2000-01-10' }, cycleAt)
+    expect(shiftPeriod(livre, -1, today)).toBeNull()
+  })
 })

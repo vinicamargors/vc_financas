@@ -20,11 +20,13 @@ export type Range = { start: string; end: string }
 export type CycleAt = (date: string) => Range
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+/** Nada antes disso: datas absurdas da URL não viram consultas nem links. */
+export const MIN_DATE = '2000-01-01'
 const MAX_SPAN_DAYS = 5 * 366
 
 /** `YYYY-MM-DD` que existe no calendário. */
 export function isLocalDate(v: unknown): v is string {
-  if (typeof v !== 'string' || !DATE_RE.test(v)) return false
+  if (typeof v !== 'string' || !DATE_RE.test(v) || v < MIN_DATE) return false
   const [y, m, d] = parseYmd(v)
   return m >= 1 && m <= 12 && d >= 1 && d <= lastDayOfMonth(y, m)
 }
@@ -112,13 +114,18 @@ function previousStart(p: Period, cycleAt: CycleAt): string {
  * Janela atual (até hoje) e a do período anterior equivalente com o mesmo número de dias,
  * sem passar do fim dele.
  */
-export function comparison(p: Period, today: string, cycleAt: CycleAt): { days: number; current: Range; previous: Range } {
+export function comparison(
+  p: Period,
+  today: string,
+  cycleAt: CycleAt,
+): { days: number; previousDays: number; current: Range; previous: Range } {
   const curEnd = p.end < today ? p.end : today
   const days = Math.max(1, daysBetween(p.start, curEnd) + 1)
   const prevStart = previousStart(p, cycleAt)
   const prevLast = addDays(p.start, -1)
   const want = addDays(prevStart, days - 1)
-  return { days, current: { start: p.start, end: curEnd }, previous: { start: prevStart, end: want < prevLast ? want : prevLast } }
+  const prevEnd = want < prevLast ? want : prevLast
+  return { days, previousDays: daysBetween(prevStart, prevEnd) + 1, current: { start: p.start, end: curEnd }, previous: { start: prevStart, end: prevEnd } }
 }
 
 /** Período anterior (-1) ou seguinte (+1); null quando o seguinte começaria depois de hoje. */
@@ -127,11 +134,11 @@ export function shiftPeriod(p: Period, dir: -1 | 1, today: string): PeriodSel | 
     const len = periodDays(p)
     const from = addDays(p.start, dir * len)
     const to = addDays(p.end, dir * len)
-    if (from > today) return null
+    if (from > today || from < MIN_DATE) return null
     return { kind: 'livre', ref: to, from, to }
   }
   const ref = dir < 0 ? addDays(p.start, -1) : addDays(p.end, 1)
-  if (ref > today) return null
+  if (ref > today || ref < MIN_DATE) return null
   return { kind: p.kind, ref }
 }
 
@@ -156,4 +163,9 @@ export function limitForPeriod(monthlyCents: number | null, days: number): numbe
 export function parseRange(start: unknown, end: unknown): Range | null {
   if (!isLocalDate(start) || !isLocalDate(end) || start > end || daysBetween(start, end) > MAX_SPAN_DAYS) return null
   return { start, end }
+}
+
+/** A variação em % só é honesta quando o período anterior tem pelo menos os mesmos dias. */
+export function comparable(c: { days: number; previousDays: number }): boolean {
+  return c.previousDays >= c.days
 }
