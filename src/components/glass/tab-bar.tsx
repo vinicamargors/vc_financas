@@ -6,9 +6,9 @@ export type TabId = 'inicio' | 'extrato' | 'gastos' | 'caixinhas'
 const TABS: { id: TabId; label: string; href?: string; icon: IconName }[] = [
   { id: 'inicio', label: 'Início', href: '/', icon: 'home' },
   { id: 'extrato', label: 'Extrato', href: '/extrato', icon: 'list' },
-  // Ainda não existem: aparecem desabilitadas ("em breve").
+  // Ainda não existe: aparece desabilitada ("em breve").
   { id: 'gastos', label: 'Gastos', icon: 'pie' },
-  { id: 'caixinhas', label: 'Caixinhas', icon: 'jar' },
+  { id: 'caixinhas', label: 'Caixinhas', href: '/caixinhas', icon: 'jar' },
 ]
 
 export function TabBar({ active }: { active: TabId | null }) {

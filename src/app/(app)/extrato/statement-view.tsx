@@ -132,7 +132,7 @@ export function StatementView({ initial, today, yesterday }: { initial: Statemen
                       {[t.accountLabel, t.cardLast4 ? `cartão •••• ${t.cardLast4}` : null, t.occurredAt ? formatTime(t.occurredAt) : null].filter(Boolean).join(' · ')}
                     </span>
                   </span>
-                  <Money cents={t.amountCents} sign className={`am${t.amountCents > 0 ? ' in' : ''}`} />
+                  <Money cents={t.amountCents} sign className={`am${t.isYield ? ' neu' : t.amountCents > 0 ? ' in' : ''}`} />
                 </li>
               ))}
             </ul>

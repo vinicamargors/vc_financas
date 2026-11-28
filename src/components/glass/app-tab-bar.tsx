@@ -6,6 +6,7 @@ import { TabBar, type TabId } from './tab-bar'
 export function activeTabFor(pathname: string): TabId | null {
   if (pathname === '/') return 'inicio'
   if (pathname === '/extrato' || pathname.startsWith('/extrato/')) return 'extrato'
+  if (pathname === '/caixinhas' || pathname.startsWith('/caixinhas/')) return 'caixinhas'
   return null
 }
 

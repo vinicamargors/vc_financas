@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupByDay } from './statement'
+import { groupByDay, statementYield } from './statement'
 
 const tx = (date: string, amountCents: number, deletedAt: string | null = null) => ({ date, amountCents, deletedAt })
 
@@ -17,5 +17,16 @@ describe('groupByDay', () => {
   })
   it('vazio', () => {
     expect(groupByDay([])).toEqual([])
+  })
+})
+
+describe('statementYield', () => {
+  it('kind gravado na sincronização vence', () => {
+    expect(statementYield({ kind: 'savings_yield', description_raw: 'Qualquer' }, false)).toBe(true)
+  })
+  it('linhas antigas: descrição + conta com caixinha', () => {
+    expect(statementYield({ kind: null, description_raw: 'Rendimento' }, true)).toBe(true)
+    expect(statementYield({ kind: null, description_raw: 'Rendimento' }, false)).toBe(false)
+    expect(statementYield({ kind: null, description_raw: 'Pix recebido' }, true)).toBe(false)
   })
 })

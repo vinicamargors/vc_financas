@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { AccountRow, TransactionRow } from '@/lib/pluggy/map'
+import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
 
 /** Espelha as colunas de `connections` (camelCase). */
 export interface ConnectionRow {
@@ -26,6 +26,10 @@ export interface SyncRepo {
   markTransactionsDeleted(userId: string, externalIds: string[]): Promise<void>
   /** Conflito em `user_id,account_id,date`: sincronizar de novo no mesmo dia sobrescreve. */
   upsertBalanceSnapshot(userId: string, accountId: string, date: string, balanceCents: number): Promise<void>
+  /** Conflito em `user_id,external_id`. Caixinhas que somem da Pluggy não são apagadas. */
+  upsertSavingsBoxes(rows: SavingsBoxRow[]): Promise<{ id: string; externalId: string }[]>
+  /** Conflito em `user_id,box_id,date`: mesmo dia sobrescreve. */
+  upsertSavingsBoxSnapshots(userId: string, date: string, rows: { boxId: string; balanceCents: number }[]): Promise<void>
 }
 
 const CHUNK = 500
@@ -120,7 +124,11 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
         )
         .select('id, external_id, type')
       if (error) throw error
-      return (data ?? []).map((a) => ({ id: a.id, externalId: a.external_id, type: a.type }))
+      return (data ?? []).map((a) => ({
+        id: a.id,
+        externalId: a.external_id,
+        type: a.type,
+      }))
     },
 
     async upsertTransactions(rows) {
@@ -128,29 +136,34 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
       const unique = [...new Map(rows.map((r) => [`${r.userId}:${r.externalId}`, r])).values()]
       for (const part of chunks(unique)) {
         // `deleted_at`, `kind`, `category_id` etc. ficam fora do payload: não são sobrescritos.
-        const { error } = await admin.from('transactions').upsert(
-          part.map((r) => ({
-            user_id: r.userId,
-            account_id: r.accountId,
-            external_id: r.externalId,
-            source: r.source,
-            date: r.date,
-            occurred_at: r.occurredAt,
-            amount_cents: r.amountCents,
-            description_raw: r.descriptionRaw,
-            pluggy_category: r.pluggyCategory,
-            counterparty_name: r.counterpartyName,
-            counterparty_doc: r.counterpartyDoc,
-            payment_method: r.paymentMethod,
-            installment_number: r.installmentNumber,
-            installment_total: r.installmentTotal,
-            card_last4: r.cardLast4,
-            status: r.status,
-            raw: r.raw,
-          })),
-          { onConflict: 'user_id,external_id' },
-        )
-        if (error) throw error
+        // Exceção: rendimento de caixinha grava `kind` (lote separado, pois colunas ausentes viram null).
+        for (const group of [part.filter((r) => !r.kind), part.filter((r) => r.kind)]) {
+          if (group.length === 0) continue
+          const { error } = await admin.from('transactions').upsert(
+            group.map((r) => ({
+              user_id: r.userId,
+              account_id: r.accountId,
+              external_id: r.externalId,
+              source: r.source,
+              date: r.date,
+              occurred_at: r.occurredAt,
+              amount_cents: r.amountCents,
+              description_raw: r.descriptionRaw,
+              pluggy_category: r.pluggyCategory,
+              counterparty_name: r.counterpartyName,
+              counterparty_doc: r.counterpartyDoc,
+              payment_method: r.paymentMethod,
+              installment_number: r.installmentNumber,
+              installment_total: r.installmentTotal,
+              card_last4: r.cardLast4,
+              status: r.status,
+              ...(r.kind ? { kind: r.kind } : {}),
+              raw: r.raw,
+            })),
+            { onConflict: 'user_id,external_id' },
+          )
+          if (error) throw error
+        }
       }
       return unique.length
     },
@@ -168,8 +181,48 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
 
     async upsertBalanceSnapshot(userId, accountId, date, balanceCents) {
       const { error } = await admin.from('balance_snapshots').upsert(
-        { user_id: userId, account_id: accountId, date, balance_cents: balanceCents },
+        {
+          user_id: userId,
+          account_id: accountId,
+          date,
+          balance_cents: balanceCents,
+        },
         { onConflict: 'user_id,account_id,date' },
+      )
+      if (error) throw error
+    },
+
+    async upsertSavingsBoxes(rows) {
+      if (rows.length === 0) return []
+      const unique = [...new Map(rows.map((r) => [`${r.userId}:${r.externalId}`, r])).values()]
+      const { data, error } = await admin
+        .from('savings_boxes')
+        .upsert(
+          unique.map((r) => ({
+            user_id: r.userId,
+            account_id: r.accountId,
+            external_id: r.externalId,
+            name: r.name,
+            balance_cents: r.balanceCents,
+            cdi_percent: r.cdiPercent,
+          })),
+          { onConflict: 'user_id,external_id' },
+        )
+        .select('id, external_id')
+      if (error) throw error
+      return (data ?? []).map((b) => ({ id: b.id, externalId: b.external_id }))
+    },
+
+    async upsertSavingsBoxSnapshots(userId, date, rows) {
+      if (rows.length === 0) return
+      const { error } = await admin.from('savings_box_snapshots').upsert(
+        rows.map((r) => ({
+          user_id: userId,
+          box_id: r.boxId,
+          date,
+          balance_cents: r.balanceCents,
+        })),
+        { onConflict: 'user_id,box_id,date' },
       )
       if (error) throw error
     },

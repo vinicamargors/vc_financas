@@ -26,7 +26,13 @@ describe.skipIf(!enabled)('createSupabaseSyncRepo (Supabase local)', () => {
     const repo = createSupabaseSyncRepo(admin)
     const source = {
       fetchItem: async () => ({ id: 'item-int', connector: { name: 'Banco Teste' }, status: 'UPDATED', executionStatus: 'SUCCESS', error: null, consentExpiresAt: null }),
-      fetchAccounts: async () => [makeAccount({ id: 'acc-int', balance: 12.34 })],
+      fetchAccounts: async () => [
+        makeAccount({
+          id: 'acc-int',
+          balance: 12.34,
+          bankData: { reservedBalances: [{ name: 'Cofrinho', identification: 'box-int', availableAmounts: [{ amount: 50.25, currencyCode: 'BRL', remuneration: { indexer: 'CDI', postFixedIndexerPercentage: 1.2 } }] }] },
+        } as never),
+      ],
       fetchTransactions: async () => [makeTransaction({ id: 'ti1' }), makeTransaction({ id: 'ti2', amount: 5 })],
     } as unknown as PluggySource
     const deps = { source, repo, today: '2026-11-27' }
@@ -42,6 +48,10 @@ describe.skipIf(!enabled)('createSupabaseSyncRepo (Supabase local)', () => {
     expect(snaps.data).toEqual([{ balance_cents: 1234 }])
     const conns = await admin.from('connections').select('status, last_synced_at').eq('user_id', uid)
     expect(conns.data).toHaveLength(1)
+    const boxes = await admin.from('savings_boxes').select('name, balance_cents, cdi_percent').eq('user_id', uid)
+    expect(boxes.data).toEqual([{ name: 'Cofrinho', balance_cents: 5025, cdi_percent: 120 }])
+    const boxSnaps = await admin.from('savings_box_snapshots').select('balance_cents').eq('user_id', uid)
+    expect(boxSnaps.data).toEqual([{ balance_cents: 5025 }])
     expect(conns.data?.[0].last_synced_at).not.toBeNull()
   })
 })
