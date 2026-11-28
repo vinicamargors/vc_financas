@@ -1252,6 +1252,9 @@ a.btn {
 .salary-form {
   flex-basis: 100%;
 }
+.salary-form .btn + .btn {
+  margin-top: 8px;
+}
 .field select {
   display: block;
   width: 100%;

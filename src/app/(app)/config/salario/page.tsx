@@ -4,6 +4,7 @@ import { loadSalarySetup } from '@/lib/queries/salary'
 import { requireUser } from '@/lib/supabase/server'
 import { addSalarySourceAction } from './actions'
 import { RemoveSource } from './remove-source'
+import { SwitchKind } from './switch-kind'
 import { RULE_LABEL, RuleFields } from './rule-fields'
 
 export const metadata = { title: 'Salário' }
@@ -26,7 +27,7 @@ export default async function SalarioPage({ searchParams }: { searchParams: Prom
       <p className="flow-lead">O ciclo começa no dia em que o salário cai. Com ele, o app calcula quanto sobra por dia.</p>
       {salvo && (
         <p role="status" className="msg ok">
-          Salário salvo.
+          {salvo === 'extra' ? 'Renda extra salva.' : 'Salário salvo.'}
         </p>
       )}
       {erro && (
@@ -50,6 +51,7 @@ export default async function SalarioPage({ searchParams }: { searchParams: Prom
                       {s.dateRule === 'fixed_day' && s.fixedDay ? ` (dia ${s.fixedDay})` : ''}
                     </small>
                   </div>
+                  <SwitchKind sourceId={s.id} kind={s.kind} />
                   <RemoveSource sourceId={s.id} name={name} />
                 </li>
               )
@@ -76,8 +78,11 @@ export default async function SalarioPage({ searchParams }: { searchParams: Prom
                   {p.payerDoc && <input type="hidden" name="payerDoc" value={p.payerDoc} />}
                   {p.payerName && <input type="hidden" name="payerName" value={p.payerName} />}
                   <RuleFields />
-                  <button type="submit" className="btn">
+                  <button type="submit" name="kind" value="salary" className="btn">
                     É meu salário
+                  </button>
+                  <button type="submit" name="kind" value="extra" className="btn secondary">
+                    É renda extra (férias, PLR, 13º, bônus)
                   </button>
                 </form>
               </li>
