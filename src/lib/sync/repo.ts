@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ClassifyTx, Kind, Rule } from '@/lib/classify/classify'
 import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
+import type { MergeCandidate, ShortcutMatch, ShortcutRow } from '@/lib/shortcut/merge'
 
 /** Espelha as colunas de `connections` (camelCase). */
 export interface ConnectionRow {
@@ -68,9 +69,24 @@ export interface SyncRepo {
   loadClassificationData(userId: string, from: string, to: string): Promise<ClassificationData>
   /** Aplica na ordem unlinked → links → decisions, só em linhas `classified_by = 'auto'`. */
   applyClassification(userId: string, changes: ClassificationChanges): Promise<void>
+  /**
+   * Para a fusão com o Atalho, na janela `[from, to]`: linhas do Atalho vivas e sem par, saídas da
+   * Pluggy em contas CREDIT, e ids da Pluggy já apontados por atalhos fundidos (`taken`).
+   */
+  loadShortcutMerge(userId: string, from: string, to: string): Promise<{ shortcuts: ShortcutRow[]; candidates: MergeCandidate[]; taken: string[] }>
+  /**
+   * Copia merchant/categoria do atalho para a linha da Pluggy (com `kind` e `classified_by = 'user'`
+   * quando o atalho foi classificado pelo usuário; nunca sobrescreve linha da Pluggy já do usuário)
+   * e apaga o atalho (soft delete) com `linked_transaction_id` apontando para a da Pluggy.
+   */
+  applyShortcutMerges(userId: string, matches: ShortcutMatch[]): Promise<void>
 }
 
 const CHUNK = 500
+
+const DAY_MS = 86_400_000
+const minusDays = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) - n * DAY_MS).toISOString().slice(0, 10)
+const plusDays = (d: string, n: number) => minusDays(d, -n)
 
 /** Listas de uuid vão na URL (`in.(...)`): lotes menores. */
 const ID_CHUNK = 100
@@ -357,7 +373,8 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
       }
       return {
         transactions: rows,
-        accounts: (accounts.data ?? []).map((a) => ({ id: a.id as string, type: a.type as 'BANK' | 'CREDIT' })),
+        // Conta MANUAL (Atalho) só recebe compras de cartão: tratada como CREDIT (nunca vira transferência).
+        accounts: (accounts.data ?? []).map((a) => ({ id: a.id as string, type: (a.type === 'MANUAL' ? 'CREDIT' : a.type) as 'BANK' | 'CREDIT' })),
         rules: (rules.data ?? []).map((r) => ({
           matchField: r.match_field as Rule['matchField'],
           pattern: r.pattern as string,
@@ -412,6 +429,91 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
             .in('id', part)
           if (error) throw error
         }
+      }
+    },
+    async loadShortcutMerge(userId, from, to) {
+      const lo = minusDays(from, 1)
+      const hi = plusDays(to, 1)
+      const [shortcuts, credit] = await Promise.all([
+        admin
+          .from('transactions')
+          .select('id, date, amount_cents, merchant_id, category_id, kind, classified_by')
+          .eq('user_id', userId)
+          .eq('source', 'shortcut')
+          .is('deleted_at', null)
+          .is('linked_transaction_id', null)
+          .gte('date', from)
+          .lte('date', to)
+          .limit(PAGE),
+        admin.from('accounts').select('id').eq('user_id', userId).eq('type', 'CREDIT'),
+      ])
+      for (const r of [shortcuts, credit]) if (r.error) throw r.error
+      const scRows = shortcuts.data ?? []
+      const creditIds = (credit.data ?? []).map((a) => a.id as string)
+      let candidates: MergeCandidate[] = []
+      const taken: string[] = []
+      if (scRows.length && creditIds.length) {
+        const amounts = [...new Set(scRows.map((s) => Number(s.amount_cents)))]
+        const { data, error } = await admin
+          .from('transactions')
+          .select('id, date, amount_cents')
+          .eq('user_id', userId)
+          .eq('source', 'pluggy')
+          .is('deleted_at', null)
+          .in('account_id', creditIds)
+          .in('amount_cents', amounts.slice(0, ID_CHUNK))
+          .gte('date', lo)
+          .lte('date', hi)
+          .order('date')
+          .limit(PAGE)
+        if (error) throw error
+        candidates = (data ?? []).map((c) => ({ id: c.id as string, date: c.date as string, amountCents: Number(c.amount_cents) }))
+        for (const part of chunks(candidates.map((c) => c.id), ID_CHUNK)) {
+          const { data: merged, error: mErr } = await admin
+            .from('transactions')
+            .select('linked_transaction_id')
+            .eq('user_id', userId)
+            .eq('source', 'shortcut')
+            .in('linked_transaction_id', part)
+          if (mErr) throw mErr
+          taken.push(...(merged ?? []).map((m) => m.linked_transaction_id as string))
+        }
+      }
+      return {
+        shortcuts: scRows.map((s) => ({
+          id: s.id as string,
+          date: s.date as string,
+          amountCents: Number(s.amount_cents),
+          merchantId: (s.merchant_id as string | null) ?? null,
+          categoryId: (s.category_id as string | null) ?? null,
+          kind: (s.kind as Kind | null) ?? null,
+          classifiedBy: s.classified_by as 'auto' | 'user',
+        })),
+        candidates,
+        taken,
+      }
+    },
+
+    async applyShortcutMerges(userId, matches) {
+      for (const { shortcut: s, pluggyId } of matches) {
+        const patch =
+          s.classifiedBy === 'user'
+            ? { merchant_id: s.merchantId, category_id: s.categoryId, kind: s.kind, classified_by: 'user' }
+            : { merchant_id: s.merchantId, category_id: s.categoryId }
+        const { error } = await admin
+          .from('transactions')
+          .update(patch)
+          .eq('user_id', userId)
+          .eq('id', pluggyId)
+          .eq('classified_by', 'auto')
+        if (error) throw error
+        const { error: delErr } = await admin
+          .from('transactions')
+          .update({ deleted_at: new Date().toISOString(), linked_transaction_id: pluggyId })
+          .eq('user_id', userId)
+          .eq('id', s.id)
+          .eq('source', 'shortcut')
+        if (delErr) throw delErr
       }
     },
   }

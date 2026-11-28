@@ -10,6 +10,7 @@ import {
 } from '@/lib/pluggy/map'
 import { toLocalDate } from '@/lib/format/date'
 import { onlyDigits } from '@/lib/classify/normalize'
+import { matchShortcuts } from '@/lib/shortcut/merge'
 import { classifyWindow, minusDays } from './classification'
 import { safeErrorMessage } from './safe-error'
 import type { SyncRepo } from './repo'
@@ -152,6 +153,11 @@ export async function syncItem(deps: SyncDeps, userId: string, itemId: string): 
   const ownerNames = [...new Set(accounts.map((a) => a.owner?.trim() ?? '').filter(Boolean))]
   // Os lançamentos já estão gravados: falha aqui só registra; o próximo sync/reclassificação conserta.
   try {
+    await mergeShortcuts(repo, userId, minusDays(from, OVERLAP_DAYS), today)
+  } catch (e) {
+    ;(deps.log ?? console.error)(`fusão com o Atalho falhou (item ${itemId}): ${safeErrorMessage(e)}`)
+  }
+  try {
     await repo.mergeOwnerIdentity(userId, ownerDocs, ownerNames)
     await classifyWindow(repo, userId, { from: minusDays(from, OVERLAP_DAYS), to: today, ownerDocs, ownerNames })
   } catch (e) {
@@ -164,6 +170,15 @@ export async function syncItem(deps: SyncDeps, userId: string, itemId: string): 
     transactions: txCount,
     status: item.status,
   }
+}
+
+/** Atalho do iPhone: a compra que chega pela Pluggy substitui a linha provisória do Atalho. */
+export async function mergeShortcuts(repo: SyncRepo, userId: string, from: string, to: string): Promise<number> {
+  const { shortcuts, candidates, taken } = await repo.loadShortcutMerge(userId, from, to)
+  if (shortcuts.length === 0) return 0
+  const matches = matchShortcuts(shortcuts, candidates, new Set(taken))
+  if (matches.length) await repo.applyShortcutMerges(userId, matches)
+  return matches.length
 }
 
 export async function deleteTransactions(deps: Pick<SyncDeps, 'repo'>, userId: string, externalIds: string[]): Promise<void> {

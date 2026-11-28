@@ -9,6 +9,7 @@ describe('isPublicPath', () => {
     ['/auth/callback', true],
     ['/api/webhooks/pluggy', true],
     ['/api/cron/sync', true],
+    ['/api/ingest/shortcut', true],
     ['/api/foo', false],
     ['/icons/a.png', true],
     ['/manifest.webmanifest', true],

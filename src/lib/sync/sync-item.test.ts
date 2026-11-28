@@ -161,3 +161,50 @@ describe('syncItem', () => {
     })
   })
 })
+
+describe('fusão com o Atalho', () => {
+  const card = makeAccount({ id: 'card-1', type: 'CREDIT' as Account['type'], subtype: 'CREDIT_CARD' as Account['subtype'], name: 'Cartão' })
+  const buy = (id: string, amount: number, date: string) =>
+    makeTransaction({ id, type: 'DEBIT', amount, description: 'PADARIA*123', date: new Date(`${date}T00:00:00Z`) } as Partial<Transaction>)
+
+  it('apaga a linha do Atalho e passa merchant/categoria do usuário para a da Pluggy', async () => {
+    const repo = createMemoryRepo()
+    const s1 = repo.insertShortcut({ userId: U, accountId: 'man', date: '2026-11-26', amountCents: -900, descriptionRaw: 'Padaria' })
+    repo.patch(s1, { merchantId: 'm-pad', categoryId: 'c-ali', kind: 'expense', classifiedBy: 'user' })
+    const s2 = repo.insertShortcut({ userId: U, accountId: 'man', date: '2026-11-26', amountCents: -1500, descriptionRaw: 'Outro' })
+    // outro usuário com a mesma compra não é tocado
+    const other = repo.insertShortcut({ userId: 'user-2', accountId: 'man2', date: '2026-11-26', amountCents: -900, descriptionRaw: 'Padaria' })
+
+    const { source } = fakeSource({ accounts: [card], txs: [buy('p1', 9, '2026-11-27')] })
+    await syncItem({ source, repo, today, now }, U, ITEM)
+
+    const d = repo.dump().transactions
+    const p1 = d.find((t) => t.externalId === 'p1')!
+    expect(p1).toMatchObject({ merchantId: 'm-pad', categoryId: 'c-ali', kind: 'expense', classifiedBy: 'user' })
+    expect(d.find((t) => t.id === s1)).toMatchObject({ linkedTransactionId: p1.id })
+    expect(d.find((t) => t.id === s1)?.deletedAt).not.toBeNull()
+    expect(d.find((t) => t.id === s2)?.deletedAt).toBeNull()
+    expect(d.find((t) => t.id === other)?.deletedAt).toBeNull()
+
+    // nova sync não casa a mesma linha da Pluggy com outro atalho de mesmo valor
+    const s3 = repo.insertShortcut({ userId: U, accountId: 'man', date: '2026-11-27', amountCents: -900, descriptionRaw: 'Padaria' })
+    await syncItem({ source, repo, today, now }, U, ITEM)
+    expect(repo.dump().transactions.find((t) => t.id === s3)?.deletedAt).toBeNull()
+  })
+
+  it('não casa com conta corrente nem com 2 dias de diferença', async () => {
+    const repo = createMemoryRepo()
+    const s1 = repo.insertShortcut({ userId: U, accountId: 'man', date: '2026-11-24', amountCents: -900, descriptionRaw: 'Padaria' })
+    const s2 = repo.insertShortcut({ userId: U, accountId: 'man', date: '2026-11-27', amountCents: -500, descriptionRaw: 'Café' })
+    const bank = makeAccount({ id: 'acc-1' })
+    const { source, fetchTransactions } = fakeSource({ accounts: [card, bank] })
+    const byAccount = fetchTransactions as unknown as { mockImplementation(f: (accountId: string) => Promise<Transaction[]>): void }
+    byAccount.mockImplementation(async (accountId: string) =>
+      accountId === 'card-1' ? [buy('p1', 9, '2026-11-26')] : [buy('p2', 5, '2026-11-27')],
+    )
+    await syncItem({ source, repo, today, now }, U, ITEM)
+    const d = repo.dump().transactions
+    expect(d.find((t) => t.id === s1)?.deletedAt).toBeNull()
+    expect(d.find((t) => t.id === s2)?.deletedAt).toBeNull()
+  })
+})

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireUser } from '@/lib/supabase/server'
 import { saveCredentialsAction, syncNowAction } from './actions'
@@ -103,6 +104,14 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
           </form>
         </section>
       )}
+
+      <section className="step">
+        <h2>Atalho do iPhone</h2>
+        <p>Compras no Apple Pay entram na hora, antes da Pluggy.</p>
+        <Link href="/config/atalho" className="btn secondary">
+          Configurar atalho
+        </Link>
+      </section>
     </main>
   )
 }
