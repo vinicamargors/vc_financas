@@ -1,3 +1,4 @@
+import { isBenefitCard } from '@/lib/benefit/benefit'
 import { toLocalDate } from '@/lib/format/date'
 import { parseAmountCents } from './amount'
 import { hashToken } from './token'
@@ -21,6 +22,8 @@ export interface IngestRepo {
   /** Lançamentos do Atalho com `occurred_at >= since` (inclui os já fundidos). */
   countShortcutsSince(userId: string, sinceIso: string): Promise<number>
   listCreditAccounts(userId: string): Promise<{ id: string; name: string; institution: string }[]>
+  /** Conta VR (BENEFIT) do usuário, se houver. */
+  findBenefitAccount(userId: string): Promise<string | null>
   /** Conta MANUAL "Atalho", criada na primeira vez. */
   ensureManualAccount(userId: string): Promise<string>
   insertTransaction(row: ShortcutInsert): Promise<void>
@@ -87,7 +90,9 @@ export async function ingestShortcut(
   const recent = await repo.countShortcutsSince(userId, new Date(at.getTime() - 3_600_000).toISOString())
   if (recent >= RATE_LIMIT_PER_HOUR) return fail(429, 'Limite de 60 lançamentos por hora atingido.')
 
-  const accountId = pickAccount(await repo.listCreditAccounts(userId), cardHint || null) ?? (await repo.ensureManualAccount(userId))
+  const benefitId = isBenefitCard(cardHint) ? await repo.findBenefitAccount(userId) : null
+  const accountId =
+    benefitId ?? pickAccount(await repo.listCreditAccounts(userId), cardHint || null) ?? (await repo.ensureManualAccount(userId))
   const date = toLocalDate(at)
   await repo.insertTransaction({ userId, accountId, date, occurredAt: at.toISOString(), amountCents: -cents, descriptionRaw: name })
   try {

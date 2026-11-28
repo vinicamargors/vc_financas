@@ -97,6 +97,8 @@ export const SHORTCUT_ACCOUNT_EXTERNAL_ID = 'atalho'
  * compra nunca vira par de transferência). Outras contas seguem como estão.
  */
 export function classifierAccountType(type: string, externalId: string | null): 'BANK' | 'CREDIT' {
+  // VR (BENEFIT) se comporta como cartão: compra não é transferência e não pareia com o banco.
+  if (type === 'BENEFIT') return 'CREDIT'
   return (type === 'MANUAL' && externalId === SHORTCUT_ACCOUNT_EXTERNAL_ID ? 'CREDIT' : type) as 'BANK' | 'CREDIT'
 }
 

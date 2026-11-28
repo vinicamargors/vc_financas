@@ -37,4 +37,20 @@ describe('assembleCycleData', () => {
     expect(d.cycle).toMatchObject({ start: '2026-12-01', end: '2026-12-31', source: 'calendar' })
     expect(d).toMatchObject({ salaryCents: 0, extrasCents: 500_000, hasSalarySource: false })
   })
+
+  it('VR fica fora do livre: recarga não é renda e compras não saem do caixa', () => {
+    const accs = [...accounts, { id: 'vr', type: 'BENEFIT' as const }]
+    const d = assembleCycleData({
+      today: '2026-12-10', sources: [], commitments: [], accounts: accs,
+      txs: [
+        tx({ id: 'recarga', accountId: 'vr', date: '2026-12-05', amountCents: 80_000, kind: 'income' }),
+        tx({ id: 'almoco', accountId: 'vr', date: '2026-12-06', amountCents: -4_000 }),
+        tx({ id: 'prev-vr', accountId: 'vr', date: '2026-11-10', amountCents: -4_000 }),
+        tx({ id: 'mkt', date: '2026-12-04', amountCents: -7_000 }),
+      ],
+    })
+    expect(d.extrasCents).toBe(0)
+    expect(d.cardEstimateCents).toBe(0)
+    expect(d.txs.map((t) => t.id)).toEqual(['mkt'])
+  })
 })

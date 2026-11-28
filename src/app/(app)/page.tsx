@@ -13,6 +13,7 @@ import { getCdiAnnual } from '@/lib/cdi'
 import { buildGoalView } from '@/lib/invest/goal-view'
 import { loadGoals } from '@/lib/queries/invest'
 import { loadInvestView } from '@/lib/queries/invest-view'
+import { loadBenefitWithRecharges } from '@/lib/queries/benefit'
 import { loadRealSpending } from '@/lib/queries/spending'
 import { loadReview, reviewCount } from '@/lib/queries/review'
 import { createServerSupabase, requireUser } from '@/lib/supabase/server'
@@ -135,6 +136,17 @@ function PaymentDayTile() {
   )
 }
 
+/** Contas VR com recargas em dia. Complemento: sem migração ou com erro, some. */
+async function loadVr(userId: string): Promise<{ name: string; balanceCents: number }[]> {
+  try {
+    const res = await loadBenefitWithRecharges(await createServerSupabase(), userId, toLocalDate(new Date()))
+    return res.missing ? [] : res.accounts.map((a) => ({ name: a.name, balanceCents: a.balanceCents }))
+  } catch (e) {
+    console.error(`carregar VR falhou: ${safeErrorMessage(e)}`)
+    return []
+  }
+}
+
 /** Potencial da primeira meta e lembrete do FGTS. Complemento: sem migração ou com erro, some. */
 async function loadGoalsSummary(userId: string): Promise<{ goal: { name: string; potentialCents: number } | null; fgtsReminder: boolean } | null> {
   try {
@@ -193,7 +205,7 @@ function SavingsBlock({
 export default async function InicioPage() {
   const user = await requireUser()
   const supabase = await createServerSupabase()
-  const [{ connections, summary, logos }, profile, savings, cdi, review, spend, cycleData, goalsSummary] = await Promise.all([
+  const [{ connections, summary, logos }, profile, savings, cdi, review, spend, cycleData, goalsSummary, vr] = await Promise.all([
     loadHomeData(),
     supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
     // Caixinhas são complemento: falha aqui não derruba o Início.
@@ -210,6 +222,7 @@ export default async function InicioPage() {
     }),
     // Metas e FGTS também são complemento (e podem não ter migração ainda).
     loadGoalsSummary(user.id),
+    loadVr(user.id),
   ])
   const today = toLocalDate(new Date())
   const needsSalary = cycleData != null && !cycleData.hasSalarySource
@@ -298,6 +311,20 @@ export default async function InicioPage() {
           O saldo do FGTS tem mais de 90 dias. <Link href="/config/fgts">Atualizar</Link>
         </p>
       )}
+      {vr.map((a) => (
+        <div key={a.name}>
+          <div className="sep" />
+          <Link href="/config/vr" className="block">
+            <span className="hd">
+              {a.name} <Icon name="chev" />
+            </span>
+            <span className="val">
+              <Money cents={a.balanceCents} />
+            </span>
+            <span className="meta">Vale-refeição, fora do saldo em conta</span>
+          </Link>
+        </div>
+      ))}
       {savings && savings.boxes.length > 0 && <SavingsBlock {...summarizeSavings(savings.boxes, [], cdi)} goal={goalsSummary?.goal ?? null} />}
     </main>
   )

@@ -162,10 +162,11 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
       </section>
 
       <section className="step">
-        <h2>Caixinhas e metas</h2>
-        <p>Saldo do FGTS e metas que juntam caixinhas e FGTS.</p>
+        <h2>Caixinhas, metas e VR</h2>
+        <p>Saldo do FGTS, metas que juntam caixinhas e FGTS, e o vale-refeição.</p>
         <p>
-          <Link href="/config/fgts">FGTS</Link> · <Link href="/metas">Metas</Link> · <Link href="/caixinhas">Caixinhas</Link>
+          <Link href="/config/fgts">FGTS</Link> · <Link href="/metas">Metas</Link> · <Link href="/caixinhas">Caixinhas</Link> ·{' '}
+          <Link href="/config/vr">VR</Link>
         </p>
       </section>
 
