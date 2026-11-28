@@ -1446,7 +1446,7 @@ a.btn {
 .kv li:last-child {
   border-bottom: 0;
 }
-.kv li span:first-child {
+.kv li > span:first-child {
   color: var(--muted);
 }
 .check-row {
@@ -1705,4 +1705,21 @@ a.period-step:hover {
 }
 .chart .bar-out {
   fill: var(--fg);
+}
+
+/* Relatório do ciclo */
+.step .up,
+.kv .up {
+  color: var(--bad);
+}
+.step .down,
+.kv .down {
+  color: var(--in);
+}
+.kv li > span:last-child {
+  text-align: right;
+}
+.period-label .tag {
+  margin-left: 6px;
+  text-transform: none;
 }

@@ -120,6 +120,23 @@ function FreeHero({ data, free }: { data: CycleData; free: FreeResult }) {
   )
 }
 
+function ReportTile() {
+  return (
+    <div className="tiles">
+      <Link href="/relatorio" className="tile">
+        <span className="n neutral" aria-hidden="true">
+          <Icon name="pie" />
+        </span>
+        <div>
+          <span className="t">Relatório do ciclo</span>
+          <span className="m">Entradas, saídas, categorias e comparação</span>
+        </div>
+        <span className="go">Ver</span>
+      </Link>
+    </div>
+  )
+}
+
 function PaymentDayTile() {
   return (
     <div className="tiles">
@@ -305,6 +322,7 @@ export default async function InicioPage() {
         </section>
       )}
       <QuickActions reviewCount={toReview} />
+      <ReportTile />
       <ConnectionStatus connections={connections} />
       {toReview > 0 && <ReviewTile count={toReview} />}
       {goalsSummary?.fgtsReminder && (

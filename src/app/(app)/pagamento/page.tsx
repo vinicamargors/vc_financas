@@ -109,7 +109,7 @@ export default async function PagamentoPage() {
       <section className="step">
         <h2>Ajustes</h2>
         <p>
-          <Link href="/config/compromissos">Compromissos</Link> · <Link href="/config/salario">Salário</Link>
+          <Link href="/relatorio">Relatório do ciclo</Link> · <Link href="/config/compromissos">Compromissos</Link> · <Link href="/config/salario">Salário</Link>
         </p>
       </section>
     </main>
