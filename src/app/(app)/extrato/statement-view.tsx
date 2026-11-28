@@ -127,6 +127,7 @@ export function StatementView({ initial, today, yesterday }: { initial: Statemen
                         <span className="tag">{`${t.installmentNumber}/${t.installmentTotal}`}</span>
                       ) : null}
                       {t.kind === 'pending_review' ? <span className="tag warn">a confirmar</span> : null}
+                      {t.missingFromBank ? <span className="tag warn">não apareceu no banco</span> : null}
                     </b>
                     <span>
                       {t.accountLabel ? <BankMark institution={t.accountLabel} logoUrl={t.logoUrl} /> : null}

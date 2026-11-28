@@ -3,10 +3,10 @@
 import { useState, useTransition } from 'react'
 import { Money } from '@/components/money'
 import { formatDayLabel } from '@/lib/format/date'
-import type { Category, PendingItem, ReviewData } from '@/lib/queries/review'
+import type { Category, PendingItem, ReviewData, SameItem } from '@/lib/queries/review'
 import type { NewPlaceGroup } from '@/lib/review/places'
 import type { PendingChoice } from '@/lib/review/review'
-import { confirmPending, teachPlace, type ReviewResult } from './actions'
+import { confirmPending, resolveSame, teachPlace, type ReviewResult } from './actions'
 
 function CategoryChips({ categories, value, onChange }: { categories: Category[]; value: string | null; onChange: (id: string) => void }) {
   if (categories.length === 0) return <p className="rv-note">Nenhuma categoria cadastrada.</p>
@@ -113,10 +113,54 @@ function PlaceCard({ group, categories }: { group: NewPlaceGroup; categories: Ca
   )
 }
 
-export function ReviewView({ pending, places, categories }: ReviewData) {
-  if (pending.length === 0 && places.length === 0) return <p className="empty">Tudo revisado.</p>
+function SameCard({ item }: { item: SameItem }) {
+  const { pending, error, save } = useSave()
+  const line = (label: string, p: PendingItem) => (
+    <div className="rv-head">
+      <span className="rv-name">
+        <small className="rv-meta">{label}</small> {p.name}
+        <span className="rv-meta">
+          {' · '}
+          {formatDayLabel(p.date)}
+          {p.bank && ` · ${p.bank}`}
+        </span>
+      </span>
+      <Money cents={p.amountCents} className="rv-amount" />
+    </div>
+  )
+  return (
+    <li className="rv-card">
+      {line('Você lançou', item.manual)}
+      {line('No banco', item.candidate)}
+      <div className="rv-actions">
+        <button type="button" className="chip" disabled={pending} onClick={() => save(() => resolveSame(item.id, 'same'))}>
+          É o mesmo
+        </button>
+        <button type="button" className="chip" disabled={pending} onClick={() => save(() => resolveSame(item.id, 'different'))}>
+          São diferentes
+        </button>
+      </div>
+      {error && <p className="msg err">{error}</p>}
+    </li>
+  )
+}
+
+export function ReviewView({ same, pending, places, categories }: ReviewData) {
+  if (same.length === 0 && pending.length === 0 && places.length === 0) return <p className="empty">Tudo revisado.</p>
   return (
     <>
+      {same.length > 0 && (
+        <section aria-labelledby="rv-mesmo">
+          <h2 id="rv-mesmo" className="rv-section">
+            É o mesmo lançamento? <span className="tag">{same.length}</span>
+          </h2>
+          <ul className="rv-list">
+            {same.map((s) => (
+              <SameCard key={s.id} item={s} />
+            ))}
+          </ul>
+        </section>
+      )}
       {pending.length > 0 && (
         <section aria-labelledby="rv-confirmar">
           <h2 id="rv-confirmar" className="rv-section">

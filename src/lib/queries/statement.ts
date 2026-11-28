@@ -1,4 +1,5 @@
 import { subDays } from 'date-fns'
+import { isMissingFromBank } from '@/lib/reconcile/reconcile'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { toLocalDate } from '@/lib/format/date'
 import { logoMap } from './logos'
@@ -39,6 +40,8 @@ export type StatementTx = DayTx & {
   isYield: boolean
   kind: Kind | null
   categoryName: string | null
+  /** Lançamento manual sem par na Pluggy depois de 3 dias. */
+  missingFromBank?: boolean
 }
 
 export const SAVINGS_YIELD_LABEL = 'Rendimento · caixinha'
@@ -50,7 +53,7 @@ export function statementYield(row: { kind: string | null; description_raw: stri
 }
 
 const COLUMNS =
-  'id, date, occurred_at, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, kind, account_id, accounts(institution, name, logo_url), merchants(display_name), categories(name)'
+  'id, date, occurred_at, amount_cents, description_raw, installment_number, installment_total, card_last4, deleted_at, kind, source, linked_transaction_id, account_id, accounts(institution, name, logo_url, type), merchants(display_name), categories(name)'
 
 export type StatementPage = { groups: DayGroup<StatementTx>[]; nextCursor: string | null }
 
@@ -112,6 +115,7 @@ export async function loadStatementPage({
     }
   }
 
+  const missing = await missingFromBankIds(supabase, rows, today)
   const groups = groupByDay(
     rows.map((t) => {
       const acc = Array.isArray(t.accounts) ? t.accounts[0] : t.accounts
@@ -133,8 +137,47 @@ export async function loadStatementPage({
         cardLast4: t.card_last4,
         installmentNumber: t.installment_number,
         installmentTotal: t.installment_total,
+        missingFromBank: missing.has(t.id),
       }
     }),
   )
   return { groups, nextCursor: hasMore && rows.length ? encodeCursor(cursorOf(rows[rows.length - 1])) : null }
+}
+
+/**
+ * Ids dos lançamentos manuais da página que "não apareceram no banco". Consulta à parte: sem a migração da
+ * conferência, o extrato continua igual (sem a etiqueta).
+ */
+async function missingFromBankIds(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  rows: { id: string; source: string; date: string; linked_transaction_id: string | null; accounts: unknown }[],
+  today: string,
+): Promise<Set<string>> {
+  const manual = rows.filter((r) => r.source === 'manual')
+  if (manual.length === 0) return new Set()
+  const { data, error } = await supabase.from('transactions').select('id, reconciled, reconcile_candidate_id').in('id', manual.map((r) => r.id))
+  if (error) return new Set()
+  const extra = new Map((data ?? []).map((d) => [d.id as string, d]))
+  const out = new Set<string>()
+  for (const r of manual) {
+    const e = extra.get(r.id)
+    const acc = (Array.isArray(r.accounts) ? r.accounts[0] : r.accounts) as { type?: string } | null
+    if (
+      e &&
+      isMissingFromBank(
+        {
+          source: r.source,
+          reconciled: !!e.reconciled,
+          deletedAt: null,
+          linkedTransactionId: r.linked_transaction_id,
+          reconcileCandidateId: (e.reconcile_candidate_id as string | null) ?? null,
+          accountType: acc?.type ?? '',
+          date: r.date,
+        },
+        today,
+      )
+    )
+      out.add(r.id)
+  }
+  return out
 }

@@ -17,6 +17,7 @@ const PATHS = {
   check: <path d="M4 12.5 9 17 20 6" />,
   bank: <path d="M3 9 12 4l9 5M5 10v8M19 10v8M9.5 10v8M14.5 10v8M3 20h18" strokeLinejoin="round" />,
   chev: <path d="m9 6 6 6-6 6" strokeWidth="2" />,
+  plus: <path d="M12 5v14M5 12h14" />,
 } as const
 
 export type IconName = keyof typeof PATHS

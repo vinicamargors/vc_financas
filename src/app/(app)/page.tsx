@@ -22,6 +22,7 @@ import { safeErrorMessage } from '@/lib/sync/safe-error'
 export const dynamic = 'force-dynamic'
 
 const ACTIONS: { label: string; icon: IconName; href: string }[] = [
+  { label: 'Lançar', icon: 'plus', href: '/lancar' },
   { label: 'Revisar', icon: 'check', href: '/revisar' },
   { label: 'Extrato', icon: 'list', href: '/extrato' },
   { label: 'Caixinhas', icon: 'jar', href: '/caixinhas' },
