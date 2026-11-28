@@ -95,7 +95,7 @@ export default async function CaixinhasPage() {
         {projection && view && (
           <p className="sub">
             Em 12 meses, no ritmo atual (<Money cents={Math.max(0, view.paceCents)} />
-            /mês): <Money cents={projection.grossCents} /> <span className="faint">(líquido de IR: <Money cents={projection.netCents} />)</span>
+            /mês): <Money cents={projection.grossCents} /> <span className="faint">(estimativa; líquido de IR: <Money cents={projection.netCents} />)</span>
           </p>
         )}
       </section>

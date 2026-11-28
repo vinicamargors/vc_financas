@@ -44,6 +44,54 @@ export function realYield(snapshots: Snapshot[], flows: Flow[]): { sinceDate: st
   return { sinceDate: first.date, yieldCents: last.balanceCents - first.balanceCents - net }
 }
 
+export type BoxSnapshot = Snapshot & { boxId: string; accountId: string }
+export type AccountFlow = Flow & { accountId: string }
+
+const PACE_WINDOW_DAYS = 120
+
+/** Início da janela de aportes: a primeira foto ou os 120 dias do ritmo, o que vier antes. */
+export function flowsWindowStart(firstSnapshot: string | undefined, today: string): string {
+  const d = new Date(`${today}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - PACE_WINDOW_DAYS)
+  const paceStart = d.toISOString().slice(0, 10)
+  return firstSnapshot && firstSnapshot < paceStart ? firstSnapshot : paceStart
+}
+
+/**
+ * Rendimento real de várias caixinhas, por conta (aportes e resgates são da conta). Em cada conta, a janela começa
+ * quando todas as caixinhas dela já existem (saldo de cada uma carregado adiante até lá): uma caixinha que aparece
+ * depois nunca conta como rendimento. Soma das contas; `sinceDate` = início mais antigo.
+ */
+export function realYieldByBoxes(snaps: BoxSnapshot[], flows: AccountFlow[]): { sinceDate: string; yieldCents: number } | null {
+  const byAccount = new Map<string, Map<string, Snapshot[]>>()
+  for (const s of snaps) {
+    const boxes = byAccount.get(s.accountId) ?? new Map<string, Snapshot[]>()
+    boxes.set(s.boxId, [...(boxes.get(s.boxId) ?? []), s])
+    byAccount.set(s.accountId, boxes)
+  }
+  let since: string | null = null
+  let total = 0
+  for (const [accountId, boxes] of byAccount) {
+    const series = [...boxes.values()].map((xs) => [...xs].sort((a, b) => a.date.localeCompare(b.date)))
+    const start = series.map((xs) => xs[0].date).sort().at(-1)!
+    const end = series.map((xs) => xs[xs.length - 1].date).sort().at(-1)!
+    const at = (xs: Snapshot[], d: string) => [...xs].reverse().find((x) => x.date <= d)!.balanceCents
+    const base = series.reduce((sum, xs) => sum + at(xs, start), 0)
+    const final = series.reduce((sum, xs) => sum + xs[xs.length - 1].balanceCents, 0)
+    const net = realYield(
+      [
+        { date: start, balanceCents: 0 },
+        { date: end, balanceCents: 0 },
+      ],
+      flows.filter((f) => f.accountId === accountId),
+    )!.yieldCents
+    // realYield com saldos zero devolve −(aportes − resgates) na janela (start, end].
+    total += final - base + net
+    if (!since || start < since) since = start
+  }
+  return since ? { sinceDate: since, yieldCents: total } : null
+}
+
 /** Juros compostos mensais, aporte no fim de cada mês, arredondando ao centavo a cada mês. IR pelo prazo (30 dias/mês). */
 export function projectMonthly(p: { startCents: number; monthlyCents: number; annualRatePct: number; months: number }): ProjectionPoint[] {
   const i = monthlyRate(p.annualRatePct)

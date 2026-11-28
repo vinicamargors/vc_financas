@@ -1,11 +1,11 @@
 import { getCdiAnnual } from '@/lib/cdi'
 import { toLocalDate } from '@/lib/format/date'
-import { fgtsEstimate, realYield } from '@/lib/invest'
+import { fgtsEstimate, realYieldByBoxes } from '@/lib/invest'
 import { FGTS_DEPOSIT_RATE } from '@/lib/invest/goal'
 import { averageMonthlyNet, salariesSince } from '@/lib/invest/plan'
 import { minusDays } from '@/lib/sync/classification'
 import { safeErrorMessage } from '@/lib/sync/safe-error'
-import { loadFgts, loadInvestData, loadRecognizedSalaries, sumByDate, type FgtsRow } from './invest'
+import { loadFgts, loadInvestData, loadRecognizedSalaries, type FgtsRow } from './invest'
 
 const PACE_WINDOW_DAYS = 120
 
@@ -28,7 +28,11 @@ export async function loadInvestView(userId: string) {
     console.error(`carregar salários falhou: ${safeErrorMessage(e)}`)
     return []
   })
-  const totalYield = realYield(sumByDate(data.snapshots), data.flows)
+  const accountOf = new Map(data.boxes.map((b) => [b.id, b.accountId]))
+  const totalYield = realYieldByBoxes(
+    data.snapshots.flatMap((s) => (accountOf.has(s.boxId) ? [{ ...s, accountId: accountOf.get(s.boxId)! }] : [])),
+    data.flows,
+  )
   const paceCents = averageMonthlyNet(data.flows, salaries.map((s) => s.date), today)
   return {
     today,

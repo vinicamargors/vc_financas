@@ -12,6 +12,8 @@ export interface ShortcutRow {
   categoryId: string | null
   kind: Kind | null
   classifiedBy: 'auto' | 'user'
+  /** Só a conta MANUAL do Atalho (cartão desconhecido) casa com qualquer cartão; ausente = sim. */
+  anyAccount?: boolean
 }
 
 /** Lançamento da Pluggy em conta de cartão (CREDIT). */
@@ -47,6 +49,7 @@ export function matchShortcuts(shortcuts: ShortcutRow[], candidates: MergeCandid
       .filter(
         (c) =>
           !used.has(c.id) &&
+          (s.anyAccount !== false || c.accountId === s.accountId) &&
           c.amountCents < 0 &&
           c.amountCents === s.amountCents &&
           dayDistance(c.date, s.date) <= 1 &&

@@ -14,6 +14,8 @@ export interface PendingManual {
 export interface SameEntryStore {
   /** Manual vivo, não conferido, do usuário; senão null. */
   getPendingManual(userId: string, id: string): Promise<PendingManual | null>
+  /** O candidato já está ligado a outro Atalho/manual (vivo ou apagado)? */
+  candidateTaken(userId: string, candidateId: string): Promise<boolean>
   /** Copia a classificação do manual para a linha da Pluggy e apaga o manual ligado a ela. */
   merge(userId: string, manual: PendingManual, candidateId: string): Promise<void>
   /** Marca o manual como conferido (diferente do candidato) e limpa o candidato. */
@@ -26,5 +28,6 @@ export async function resolveSameEntry(store: SameEntryStore, userId: string, ma
   if (!m) throw new Error('lançamento não encontrado')
   if (choice === 'different') return store.markReconciled(userId, m.id)
   if (!m.candidateId) throw new Error('sem candidato')
+  if (await store.candidateTaken(userId, m.candidateId)) throw new Error('candidato já ligado a outro lançamento')
   await store.merge(userId, m, m.candidateId)
 }

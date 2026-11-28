@@ -1,7 +1,7 @@
 import { parseMoneyCents } from '@/lib/commitments/form'
 
 /** Nome de cartão de benefício (VR/VA) enviado pelo Atalho. */
-const BENEFIT_CARD_RE = /alelo|ticket|\bvr\b|pluxee|sodexo|flash|caju|swile|ben visa|vale/i
+const BENEFIT_CARD_RE = /(?<![\p{L}\p{N}])(alelo|ticket|vr|pluxee|sodexo|flash|caju|swile|ben visa|vale)(?![\p{L}\p{N}])/iu
 
 export function isBenefitCard(card: string | null | undefined): boolean {
   return !!card && BENEFIT_CARD_RE.test(card)

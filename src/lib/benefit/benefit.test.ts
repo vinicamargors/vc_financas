@@ -40,4 +40,10 @@ describe('parseVrForm', async () => {
     expect(parseVrForm(g({ name: 'VR', monthly: '800', day: '32' }))).toEqual({ ok: false, error: 'dia' })
     expect(parseVrForm(g({ name: 'VR', monthly: '800', day: '1.5' }))).toEqual({ ok: false, error: 'dia' })
   })
+
+describe('isBenefitCard: palavras inteiras', () => {
+  it('não casa pedaços de palavra', () => {
+    for (const c of ['Flashback Card', 'Cajuína', 'Valendo', 'Ticketmaster', 'Avaler']) expect(isBenefitCard(c), c).toBe(false)
+  })
+})
 })

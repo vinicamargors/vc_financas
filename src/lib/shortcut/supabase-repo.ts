@@ -54,6 +54,7 @@ export function createSupabaseIngestRepo(admin: SupabaseClient): IngestRepo {
       const { error } = await admin.from('transactions').insert({
         user_id: r.userId,
         account_id: r.accountId,
+        payment_method: r.paymentMethod ?? null,
         external_id: null,
         source: 'shortcut',
         date: r.date,

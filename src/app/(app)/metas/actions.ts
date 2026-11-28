@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { parseGoalForm } from '@/lib/invest/forms'
+import { toLocalDate } from '@/lib/format/date'
+import { parseGoalForm, UUID_RE } from '@/lib/invest/forms'
 import { createServerSupabase, requireUser } from '@/lib/supabase/server'
 import { safeErrorMessage } from '@/lib/sync/safe-error'
 
@@ -17,6 +18,7 @@ function revalidateAll() {
 export async function saveGoalAction(form: FormData): Promise<void> {
   const user = await requireUser()
   const id = String(form.get('id') ?? '')
+  if (id && !UUID_RE.test(id)) redirect(`${PAGE}?erro=falha`)
   const back = id ? `${PAGE}/${encodeURIComponent(id)}` : PAGE
   const parsed = parseGoalForm(
     (k) => {
@@ -24,6 +26,7 @@ export async function saveGoalAction(form: FormData): Promise<void> {
       return typeof v === 'string' ? v : null
     },
     form.getAll('box').filter((v): v is string => typeof v === 'string'),
+    toLocalDate(new Date()),
   )
   if (!parsed.ok) redirect(`${back}?erro=${parsed.error}`)
   const g = parsed.value
@@ -60,6 +63,7 @@ export async function saveGoalAction(form: FormData): Promise<void> {
 export async function deleteGoalAction(form: FormData): Promise<void> {
   const user = await requireUser()
   const id = String(form.get('id') ?? '')
+  if (!UUID_RE.test(id)) redirect(`${PAGE}?erro=falha`)
   const db = await createServerSupabase()
   const { error } = await db.from('goals').delete().eq('user_id', user.id).eq('id', id)
   if (error) return fail(`${PAGE}/${encodeURIComponent(id)}`, error)

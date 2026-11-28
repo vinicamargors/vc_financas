@@ -132,5 +132,8 @@ describe('ingestShortcut', () => {
     const n = memory([{ id: 'c1', userId: 'A', type: 'CREDIT', name: 'Nubank', institution: 'Nubank' }])
     await ingestShortcut(n.repo, req({ amount: 30, merchant: 'Restaurante', card: 'Ticket' }), now)
     expect(n.inserted[0].accountId).toBe('c1')
+    // ... mas marcada como compra de benefício, para nunca ser fundida com a fatura do cartão.
+    expect(n.inserted[0].paymentMethod).toBe('BENEFIT')
+    expect(m.inserted[0].paymentMethod).toBe('BENEFIT')
   })
 })

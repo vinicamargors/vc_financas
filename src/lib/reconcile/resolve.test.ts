@@ -4,6 +4,7 @@ import { resolveSameEntry, type SameEntryStore } from './resolve'
 function store() {
   const manuals = new Map([
     ['m1', { userId: 'A', id: 'm1', candidateId: 'p1', kind: 'expense' as const, categoryId: 'c', merchantId: null }],
+    ['m3', { userId: 'A', id: 'm3', candidateId: 'p-taken', kind: 'expense' as const, categoryId: null, merchantId: null }],
     ['m2', { userId: 'A', id: 'm2', candidateId: null, kind: 'expense' as const, categoryId: null, merchantId: null }],
   ])
   const calls: string[] = []
@@ -11,6 +12,9 @@ function store() {
     async getPendingManual(userId, id) {
       const m = manuals.get(id)
       return m && m.userId === userId ? m : null
+    },
+    async candidateTaken(userId, candidateId) {
+      return candidateId === 'p-taken'
     },
     async merge(userId, m, candidateId) {
       calls.push(`merge:${userId}:${m.id}->${candidateId}:${m.categoryId}`)
@@ -39,6 +43,11 @@ describe('resolveSameEntry', () => {
     await expect(resolveSameEntry(s, 'A', 'zz', 'different')).rejects.toThrow()
     await expect(resolveSameEntry(s, 'A', 'm2', 'same')).rejects.toThrow()
     await expect(resolveSameEntry(s, 'A', 'm1', 'talvez' as 'same')).rejects.toThrow()
+    expect(calls).toEqual([])
+  })
+  it('candidato já ligado a outro lançamento: recusa', async () => {
+    const { s, calls } = store()
+    await expect(resolveSameEntry(s, 'A', 'm3', 'same')).rejects.toThrow()
     expect(calls).toEqual([])
   })
 })

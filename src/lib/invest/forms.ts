@@ -11,7 +11,9 @@ export type GoalValues = {
   includeFgts: boolean
   boxIds: string[]
 }
-export type GoalFormError = 'nome' | 'alvo' | 'data' | 'aporte' | 'faixa'
+export type GoalFormError = 'nome' | 'alvo' | 'data' | 'aporte' | 'faixa' | 'caixinha'
+
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export type FgtsValues = {
   balanceCents: number
@@ -34,22 +36,30 @@ function optionalMoney(raw: string): number | null | undefined {
   return parseMoneyCents(raw) ?? undefined
 }
 
-/** Valida o formulário de meta. `boxIds` vem dos checkboxes (duplicados removidos; posse checada pela FK/RLS). */
-export function parseGoalForm(get: (k: string) => string | null, boxIds: string[]): { ok: true; value: GoalValues } | { ok: false; error: GoalFormError } {
+/**
+ * Valida o formulário de meta. `boxIds` vem dos checkboxes (uuids, duplicados removidos; posse checada pela FK/RLS).
+ * A data-alvo não pode ser anterior a `today`.
+ */
+export function parseGoalForm(
+  get: (k: string) => string | null,
+  boxIds: string[],
+  today: string,
+): { ok: true; value: GoalValues } | { ok: false; error: GoalFormError } {
   const str = (k: string) => (get(k) ?? '').trim()
   const name = str('name')
   if (!name || name.length > NAME_MAX) return { ok: false, error: 'nome' }
   const targetCents = optionalMoney(str('target'))
   if (targetCents === undefined) return { ok: false, error: 'alvo' }
   const targetDate = str('targetDate') || null
-  if (targetDate && !isValidDate(targetDate)) return { ok: false, error: 'data' }
+  if (targetDate && (!isValidDate(targetDate) || targetDate < today)) return { ok: false, error: 'data' }
   const plannedMinCents = optionalMoney(str('min'))
   const plannedMaxCents = optionalMoney(str('max'))
   if (plannedMinCents === undefined || plannedMaxCents === undefined) return { ok: false, error: 'aporte' }
   if (plannedMinCents != null && plannedMaxCents != null && plannedMinCents > plannedMaxCents) return { ok: false, error: 'faixa' }
+  if (boxIds.some((b) => !UUID_RE.test(b))) return { ok: false, error: 'caixinha' }
   return {
     ok: true,
-    value: { name, targetCents, targetDate, plannedMinCents, plannedMaxCents, includeFgts: str('fgts') === 'on', boxIds: [...new Set(boxIds.filter(Boolean))] },
+    value: { name, targetCents, targetDate, plannedMinCents, plannedMaxCents, includeFgts: str('fgts') === 'on', boxIds: [...new Set(boxIds)] },
   }
 }
 

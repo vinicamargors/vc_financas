@@ -1,5 +1,6 @@
 import { pickSalaries, type IncomeRow } from '@/lib/cycle/salary'
-import type { Flow, Snapshot } from '@/lib/invest'
+import { flowsWindowStart, type Flow, type Snapshot } from '@/lib/invest'
+import { toLocalDate } from '@/lib/format/date'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { INCOME_SOURCE_COLUMNS, incomeSourceFromDb } from './salary'
 
@@ -51,18 +52,20 @@ export async function loadInvestData(userId: string): Promise<{ boxes: BoxRow[];
   const rows = (boxes.data ?? []).map(boxFromDb)
   const snapshots = (snaps.data ?? []).map((s) => ({ boxId: s.box_id as string, date: s.date as string, balanceCents: Number(s.balance_cents) }))
   const accountIds = [...new Set(rows.map((b) => b.accountId))]
-  const first = snapshots[0]?.date
+  // Aportes desde a primeira foto (rendimento real) e dos últimos 120 dias (ritmo), o que for mais antigo.
+  const first = flowsWindowStart(snapshots[0]?.date, toLocalDate(new Date()))
   let flows: AccountFlow[] = []
   if (accountIds.length > 0) {
-    let q = db
+    const { data, error } = await db
       .from('transactions')
       .select('account_id, date, amount_cents, kind')
       .eq('user_id', userId)
       .in('account_id', accountIds)
       .in('kind', ['investment_in', 'investment_out'])
       .is('deleted_at', null)
-    if (first) q = q.gte('date', first)
-    const { data, error } = await q.order('date').limit(5000)
+      .gte('date', first)
+      .order('date')
+      .limit(5000)
     if (error) throw error
     flows = (data ?? []).map((t) => ({
       accountId: t.account_id as string,

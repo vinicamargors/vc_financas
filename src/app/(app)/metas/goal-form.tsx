@@ -62,7 +62,8 @@ export function GoalForm({
 export const GOAL_ERRORS: Record<string, string> = {
   nome: 'Dê um nome de até 80 letras.',
   alvo: 'Informe um alvo válido ou deixe em branco.',
-  data: 'Informe uma data-alvo válida.',
+  data: 'Informe uma data-alvo válida, a partir de hoje.',
+  caixinha: 'Escolha caixinhas da lista.',
   aporte: 'Informe aportes válidos ou deixe em branco.',
   faixa: 'O aporte mínimo não pode passar do máximo.',
   falha: 'Não foi possível salvar. Tente de novo.',

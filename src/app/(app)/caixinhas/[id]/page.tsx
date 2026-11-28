@@ -74,15 +74,15 @@ export default async function CaixinhaPage({ params }: { params: Promise<{ id: s
               <Money cents={pace} />
             </li>
             <li>
-              <span>Bruto</span>
+              <span>Bruto (estimativa)</span>
               <Money cents={outlook.scenarios[0].grossCents} />
             </li>
             <li>
-              <span>IR estimado</span>
+              <span>IR (estimativa, tabela regressiva)</span>
               <Money cents={outlook.scenarios[0].irCents} />
             </li>
             <li>
-              <span>Líquido</span>
+              <span>Líquido (estimativa)</span>
               <Money cents={outlook.scenarios[0].netCents} />
             </li>
           </ul>

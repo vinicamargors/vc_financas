@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Kind } from '@/lib/classify/classify'
+import { mergePatch } from './reconcile'
 import type { SameEntryStore } from './resolve'
 
 /** Store da Revisar com o cliente do usuário (RLS) e filtro explícito por `user_id`. */
@@ -27,6 +28,16 @@ export function createSupabaseSameEntryStore(db: SupabaseClient): SameEntryStore
           }
         : null
     },
+    async candidateTaken(userId, candidateId) {
+      const { count, error } = await db
+        .from('transactions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .in('source', ['shortcut', 'manual'])
+        .eq('linked_transaction_id', candidateId)
+      if (error) throw error
+      return (count ?? 0) > 0
+    },
     async merge(userId, m, candidateId) {
       // Candidato precisa ser lançamento vivo da Pluggy do próprio usuário.
       const { data: cand, error: cErr } = await db
@@ -49,11 +60,15 @@ export function createSupabaseSameEntryStore(db: SupabaseClient): SameEntryStore
         .select('id')
       if (dErr) throw dErr
       if ((gone ?? []).length !== 1) return
+      const patch = mergePatch({ ...m, classifiedBy: 'user' })
+      if (!patch) return
+      // Nunca sobrescreve uma linha da Pluggy que o usuário já classificou.
       const { error } = await db
         .from('transactions')
-        .update({ kind: m.kind, category_id: m.categoryId, merchant_id: m.merchantId, classified_by: 'user' })
+        .update(patch)
         .eq('user_id', userId)
         .eq('id', candidateId)
+        .eq('classified_by', 'auto')
       if (error) throw error
     },
     async markReconciled(userId, id) {

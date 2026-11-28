@@ -56,7 +56,7 @@ export default async function FgtsPage({ searchParams }: { searchParams: Promise
                   <Money cents={f.balanceCents} />
                 </li>
                 <li>
-                  <span>Estimativa de hoje</span>
+                  <span>Estimativa de hoje (3% a.a., TR zero)</span>
                   <Money cents={f.estimateCents} />
                 </li>
                 {f.hasRatio && (

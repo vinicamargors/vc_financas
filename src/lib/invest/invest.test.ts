@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fgtsEstimate, irRate, monthlyRate, projectMonthly, realYield, scenarios } from './index'
+import { fgtsEstimate, flowsWindowStart, irRate, monthlyRate, projectMonthly, realYield, realYieldByBoxes, scenarios } from './index'
 
 describe('irRate', () => {
   it('segue a tabela regressiva', () => {
@@ -98,5 +98,48 @@ describe('scenarios', () => {
     expect(s.current?.at(-1)?.grossCents).toBe(4_454_780)
     expect(s.min?.at(-1)?.investedCents).toBe(1_840_000 + 14 * 100_000)
     expect(s.max).toBeNull()
+  })
+})
+
+describe('realYieldByBoxes', () => {
+  it('soma por caixinha; caixinha que aparece depois não conta como rendimento', () => {
+    const r = realYieldByBoxes(
+      [
+        { boxId: 'a', accountId: 'acc1', date: '2026-11-01', balanceCents: 100_000 },
+        { boxId: 'a', accountId: 'acc1', date: '2026-11-28', balanceCents: 101_000 },
+        // caixinha nova em outra conta, com 50.000 desde o primeiro dia dela
+        { boxId: 'b', accountId: 'acc2', date: '2026-11-20', balanceCents: 50_000 },
+        { boxId: 'b', accountId: 'acc2', date: '2026-11-28', balanceCents: 50_200 },
+      ],
+      [{ accountId: 'acc2', date: '2026-11-15', kind: 'investment_in', amountCents: -50_000 }],
+    )
+    expect(r).toEqual({ sinceDate: '2026-11-01', yieldCents: 1_200 })
+  })
+  it('várias caixinhas na mesma conta: janela a partir de quando todas existem (saldo carregado adiante)', () => {
+    const r = realYieldByBoxes(
+      [
+        { boxId: 'a', accountId: 'acc', date: '2026-11-01', balanceCents: 100_000 },
+        { boxId: 'a', accountId: 'acc', date: '2026-11-25', balanceCents: 100_800 },
+        { boxId: 'b', accountId: 'acc', date: '2026-11-10', balanceCents: 30_000 },
+        { boxId: 'b', accountId: 'acc', date: '2026-11-28', balanceCents: 40_100 },
+      ],
+      [
+        { accountId: 'acc', date: '2026-11-05', kind: 'investment_in', amountCents: -30_000 },
+        { accountId: 'acc', date: '2026-11-20', kind: 'investment_in', amountCents: -10_000 },
+      ],
+    )
+    // de 10/11 (a = 100.000 carregado, b = 30.000) a 28/11 (a = 100.800, b = 40.100): +10.900 − aporte 10.000
+    expect(r).toEqual({ sinceDate: '2026-11-10', yieldCents: 900 })
+  })
+  it('sem fotos → null', () => {
+    expect(realYieldByBoxes([], [])).toBeNull()
+  })
+})
+
+describe('flowsWindowStart', () => {
+  it('cobre a primeira foto e os 120 dias do ritmo', () => {
+    expect(flowsWindowStart('2026-11-01', '2026-11-28')).toBe('2026-07-31')
+    expect(flowsWindowStart('2026-01-10', '2026-11-28')).toBe('2026-01-10')
+    expect(flowsWindowStart(undefined, '2026-11-28')).toBe('2026-07-31')
   })
 })

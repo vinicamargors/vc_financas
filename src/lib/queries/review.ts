@@ -118,9 +118,17 @@ async function loadSameItems(db: Awaited<ReturnType<typeof createServerSupabase>
     .in('id', manuals.map((m) => m.reconcile_candidate_id))
     .is('deleted_at', null)
   if (cErr) throw new Error('Falha ao carregar a revisão')
+  // Candidato já ligado a outro Atalho/manual (vivo ou apagado) não pode ser fundido de novo.
+  const { data: linked, error: lErr } = await db
+    .from('transactions')
+    .select('linked_transaction_id')
+    .in('source', ['shortcut', 'manual'])
+    .in('linked_transaction_id', manuals.map((m) => m.reconcile_candidate_id))
+  if (lErr) throw new Error('Falha ao carregar a revisão')
+  const taken = new Set((linked ?? []).map((l) => l.linked_transaction_id as string))
   const byId = new Map(((cands ?? []) as unknown as Row[]).map((c) => [c.id, c]))
   return manuals.flatMap((m) => {
-    const c = byId.get(m.reconcile_candidate_id)
+    const c = taken.has(m.reconcile_candidate_id) ? undefined : byId.get(m.reconcile_candidate_id)
     return c ? [{ id: m.id, manual: toItem(m), candidate: toItem(c) }] : []
   })
 }

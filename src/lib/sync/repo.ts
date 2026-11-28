@@ -2,7 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ClassifyTx, IncomeSourceMatch, Kind, Rule } from '@/lib/classify/classify'
 import type { AccountRow, SavingsBoxRow, TransactionRow } from '@/lib/pluggy/map'
 import { minusDays } from './classification'
-import type { ManualRow, ReconcileCandidate } from '@/lib/reconcile/reconcile'
+import { mergePatch, type ManualRow, type ReconcileCandidate } from '@/lib/reconcile/reconcile'
+import { BENEFIT_PAYMENT_METHOD } from '@/lib/shortcut/ingest'
 import type { MergeCandidate, ShortcutMatch, ShortcutRow } from '@/lib/shortcut/merge'
 
 /** Espelha as colunas de `connections` (camelCase). */
@@ -92,7 +93,7 @@ export interface SyncRepo {
    */
   loadManualReconcile(userId: string, from: string, to: string): Promise<{ manuals: ManualRow[]; candidates: ReconcileCandidate[]; taken: string[] }>
   /** Grava a dúvida (`reconcile_candidate_id`) em manuais vivos e não conferidos do usuário. */
-  setReconcileCandidates(userId: string, doubts: { manualId: string; candidateId: string }[]): Promise<void>
+  setReconcileCandidates(userId: string, doubts: { manualId: string; candidateId: string | null }[]): Promise<void>
 }
 
 const CHUNK = 500
@@ -472,7 +473,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
     async loadShortcutMerge(userId, from, to) {
       const lo = minusDays(from, 1)
       const hi = minusDays(to, -1)
-      const [shortcuts, credit] = await Promise.all([
+      const [shortcuts, accs] = await Promise.all([
         admin
           .from('transactions')
           .select('id, account_id, date, amount_cents, created_at, merchant_id, category_id, kind, classified_by')
@@ -480,14 +481,22 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
           .eq('source', 'shortcut')
           .is('deleted_at', null)
           .is('linked_transaction_id', null)
+          // Compra com cartão de benefício nunca vira linha de fatura.
+          .or(`payment_method.is.null,payment_method.neq.${BENEFIT_PAYMENT_METHOD}`)
           .gte('date', from)
           .lte('date', to)
           .limit(PAGE),
-        admin.from('accounts').select('id').eq('user_id', userId).eq('type', 'CREDIT'),
+        admin.from('accounts').select('id, type, external_id').eq('user_id', userId),
       ])
-      for (const r of [shortcuts, credit]) if (r.error) throw r.error
-      const scRows = shortcuts.data ?? []
-      const creditIds = (credit.data ?? []).map((a) => a.id as string)
+      for (const r of [shortcuts, accs]) if (r.error) throw r.error
+      const accType = new Map((accs.data ?? []).map((a) => [a.id as string, a]))
+      const isAtalho = (id: string) => {
+        const a = accType.get(id)
+        return a?.type === 'MANUAL' && a.external_id === SHORTCUT_ACCOUNT_EXTERNAL_ID
+      }
+      // Atalho no VR (BENEFIT) não tem fatura: fica fora da fusão.
+      const scRows = (shortcuts.data ?? []).filter((s) => accType.get(s.account_id as string)?.type !== 'BENEFIT')
+      const creditIds = (accs.data ?? []).filter((a) => a.type === 'CREDIT').map((a) => a.id as string)
       let candidates: MergeCandidate[] = []
       const taken: string[] = []
       if (scRows.length && creditIds.length) {
@@ -534,6 +543,7 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
           categoryId: (s.category_id as string | null) ?? null,
           kind: (s.kind as Kind | null) ?? null,
           classifiedBy: s.classified_by as 'auto' | 'user',
+          anyAccount: isAtalho(s.account_id as string),
         })),
         candidates,
         taken,
@@ -554,11 +564,8 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
           .select('id')
         if (delErr) throw delErr
         if ((gone ?? []).length !== 1) continue
-        if (s.merchantId === null && s.categoryId === null && s.classifiedBy !== 'user') continue
-        const patch =
-          s.classifiedBy === 'user'
-            ? { merchant_id: s.merchantId, category_id: s.categoryId, kind: s.kind, classified_by: 'user' }
-            : { merchant_id: s.merchantId, category_id: s.categoryId }
+        const patch = mergePatch(s)
+        if (!patch) continue
         const { error } = await admin
           .from('transactions')
           .update(patch)
@@ -603,6 +610,8 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
         reconcileCandidateId: (s.reconcile_candidate_id as string | null) ?? null,
       }))
       if (manuals.length === 0) return { manuals, candidates: [], taken: [] }
+      const lowCents = Math.floor(Math.min(...manuals.map((m) => m.amountCents - Math.abs(m.amountCents) * 0.05)))
+      const highCents = Math.ceil(Math.max(...manuals.map((m) => m.amountCents + Math.abs(m.amountCents) * 0.05)))
       const { data: cRows, error: cErr } = await admin
         .from('transactions')
         .select('id, account_id, date, amount_cents, created_at, occurred_at, description_raw')
@@ -610,9 +619,11 @@ export function createSupabaseSyncRepo(admin: SupabaseClient): SyncRepo {
         .eq('source', 'pluggy')
         .is('deleted_at', null)
         .in('account_id', eligible)
+        .gte('amount_cents', lowCents)
+        .lte('amount_cents', highCents)
         .gte('date', minusDays(from, 1))
         .lte('date', minusDays(to, -1))
-        .order('date')
+        .order('date', { ascending: false })
         .limit(PAGE)
       if (cErr) throw cErr
       const amounts = manuals.map((m) => Math.abs(m.amountCents))

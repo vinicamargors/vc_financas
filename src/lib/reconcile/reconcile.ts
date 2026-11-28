@@ -25,14 +25,16 @@ export interface ReconcileCandidate {
 export interface ReconcileResult {
   /** Certeza: funde (mesma operação da fusão do Atalho). */
   merges: ShortcutMatch[]
-  /** Dúvida: grava `reconcile_candidate_id` no manual, para a tela Revisar. */
-  doubts: { manualId: string; candidateId: string }[]
+  /** Dúvida: grava `reconcile_candidate_id` no manual, para a tela Revisar (`null` limpa uma dúvida que caducou). */
+  doubts: { manualId: string; candidateId: string | null }[]
 }
 
 const NEAR_PCT = 0.05
 const SAME_TIME_MS = 2 * 3_600_000
 export const MISSING_AFTER_DAYS = 3
 const MIN_WORD = 3
+/** Palavras genéricas de extrato: não indicam que duas descrições são do mesmo lugar. */
+const STOPWORDS = new Set(['pix', 'compra', 'pagamento', 'enviado', 'enviada', 'recebido', 'recebida', 'transferencia', 'cartao', 'debito', 'credito', 'ted', 'doc', 'ltda'])
 
 const words = (text: string) =>
   new Set(
@@ -41,7 +43,7 @@ const words = (text: string) =>
       .replace(/\p{M}/gu, '')
       .toLowerCase()
       .split(/[^\p{L}\p{N}]+/u)
-      .filter((w) => w.length >= MIN_WORD),
+      .filter((w) => w.length >= MIN_WORD && !STOPWORDS.has(w)),
   )
 
 /** Descrições parecidas: alguma palavra (≥ 3 letras) em comum, sem acento e sem caixa. */
@@ -68,16 +70,12 @@ export function reconcileManuals(manuals: ManualRow[], candidates: ReconcileCand
     const since = Date.parse(m.createdAt) - SEEN_AFTER_MS
     const byCloseness = (a: ReconcileCandidate, b: ReconcileCandidate) => dayDistance(a.date, m.date) - dayDistance(b.date, m.date) || a.id.localeCompare(b.id)
     const pool = candidates
-      .filter(
-        (c) =>
-          !used.has(c.id) &&
-          Math.sign(c.amountCents) === Math.sign(m.amountCents) &&
-          dayDistance(c.date, m.date) <= 1 &&
-          Date.parse(c.createdAt) >= since,
-      )
+      .filter((c) => !used.has(c.id) && Math.sign(c.amountCents) === Math.sign(m.amountCents) && dayDistance(c.date, m.date) <= 1)
       .sort(byCloseness)
     const exact = pool.filter((c) => c.accountId === m.accountId && c.amountCents === m.amountCents)
-    if (exact.length === 1 && (similarDescription(m.description, exact[0].description) || closeInTime(m.occurredAt, exact[0].occurredAt))) {
+    // Certeza só com linha gravada depois do manual (menos 10 min); uma compra antiga de mesmo valor vira dúvida.
+    const seenAfter = exact.length === 1 && Date.parse(exact[0].createdAt) >= since
+    if (seenAfter && (similarDescription(m.description, exact[0].description) || closeInTime(m.occurredAt, exact[0].occurredAt))) {
       used.add(exact[0].id)
       merges.push({ shortcut: m, pluggyId: exact[0].id })
       continue
@@ -87,8 +85,25 @@ export function reconcileManuals(manuals: ManualRow[], candidates: ReconcileCand
     const sameBank = pool.filter((c) => c.accountId !== m.accountId && m.bankKey != null && c.bankKey === m.bankKey && c.amountCents === m.amountCents)
     const best = exact[0] ?? near[0] ?? sameBank[0]
     if (best && best.id !== m.reconcileCandidateId) doubts.push({ manualId: m.id, candidateId: best.id })
+    // A dúvida gravada caducou (candidato sumiu ou foi ligado a outro lançamento).
+    else if (!best && m.reconcileCandidateId) doubts.push({ manualId: m.id, candidateId: null })
   }
   return { merges, doubts }
+}
+
+/**
+ * O que a fusão copia do provisório (Atalho/manual) para a linha da Pluggy: só campos preenchidos. O `kind` do
+ * usuário vai sempre; a linha só passa a ser do usuário quando ele escolheu a categoria. `null` = nada a copiar.
+ */
+export function mergePatch(s: Pick<ShortcutRow, 'kind' | 'categoryId' | 'merchantId' | 'classifiedBy'>): Record<string, string> | null {
+  const patch: Record<string, string> = {}
+  if (s.merchantId) patch.merchant_id = s.merchantId
+  if (s.categoryId) patch.category_id = s.categoryId
+  if (s.classifiedBy === 'user') {
+    if (s.kind) patch.kind = s.kind
+    if (s.categoryId) patch.classified_by = 'user'
+  }
+  return Object.keys(patch).length ? patch : null
 }
 
 /** "Não apareceu no banco": manual fora do VR, sem par nem dúvida e não conferido, há mais de 3 dias. */

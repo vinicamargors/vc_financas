@@ -57,7 +57,6 @@ describe('reconcileManuals', () => {
     const r = reconcileManuals(
       [manual()],
       [
-        cand({ id: 'old', createdAt: '2026-11-27T14:00:00Z' }),
         cand({ id: 'taken' }),
         cand({ id: 'far', date: '2026-11-29' }),
         cand({ id: 'in', amountCents: 4_590 }),
@@ -65,6 +64,23 @@ describe('reconcileManuals', () => {
       new Set(['taken']),
     )
     expect(r).toEqual({ merges: [], doubts: [] })
+  })
+
+  it('candidato gravado antes do manual nunca dá certeza: vira dúvida', () => {
+    const r = reconcileManuals([manual()], [cand({ id: 'old', createdAt: '2026-11-27T14:00:00Z' })], new Set())
+    expect(r).toEqual({ merges: [], doubts: [{ manualId: 'm1', candidateId: 'old' }] })
+  })
+
+  it('candidato em dúvida que sumiu ou foi ligado a outro: limpa a dúvida', () => {
+    expect(reconcileManuals([manual({ reconcileCandidateId: 'gone' })], [], new Set()).doubts).toEqual([{ manualId: 'm1', candidateId: null }])
+    expect(reconcileManuals([manual({ reconcileCandidateId: 'p1' })], [cand()], new Set(['p1'])).doubts).toEqual([{ manualId: 'm1', candidateId: null }])
+  })
+
+  it('descrição só com palavras genéricas não é "parecida"', () => {
+    expect(similarDescription('Pix enviado', 'PIX ENVIADO JOAO')).toBe(false)
+    expect(similarDescription('Compra cartão débito', 'COMPRA CARTAO DEBITO POSTO')).toBe(false)
+    const r = reconcileManuals([manual({ description: 'Pix enviado' })], [cand({ description: 'PIX ENVIADO MARIA' })], new Set())
+    expect(r.merges).toEqual([])
   })
 
   it('cada linha da Pluggy funde uma vez só', () => {
@@ -90,5 +106,15 @@ describe('isMissingFromBank', () => {
     expect(isMissingFromBank({ ...row, reconcileCandidateId: 'p' }, '2026-12-28')).toBe(false)
     expect(isMissingFromBank({ ...row, accountType: 'BENEFIT' }, '2026-12-28')).toBe(false)
     expect(isMissingFromBank({ ...row, source: 'pluggy' }, '2026-12-28')).toBe(false)
+  })
+})
+
+describe('mergePatch', async () => {
+  const { mergePatch } = await import('./reconcile')
+  it('copia só o preenchido; vira do usuário só com categoria', () => {
+    expect(mergePatch({ kind: 'expense', categoryId: null, merchantId: null, classifiedBy: 'user' })).toEqual({ kind: 'expense' })
+    expect(mergePatch({ kind: 'expense', categoryId: 'c', merchantId: null, classifiedBy: 'user' })).toEqual({ kind: 'expense', category_id: 'c', classified_by: 'user' })
+    expect(mergePatch({ kind: null, categoryId: null, merchantId: 'm', classifiedBy: 'auto' })).toEqual({ merchant_id: 'm' })
+    expect(mergePatch({ kind: 'expense', categoryId: null, merchantId: null, classifiedBy: 'auto' })).toBeNull()
   })
 })

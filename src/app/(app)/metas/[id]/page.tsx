@@ -115,14 +115,14 @@ export default async function MetaPage({ params, searchParams }: { params: Promi
                   <span className="am-stack">
                     <Money cents={s.grossCents} />
                     <small className="faint">
-                      líquido <Money cents={s.netCents} />
+                      líquido estimado <Money cents={s.netCents} />
                     </small>
                   </span>
                 </li>
               ))}
             </ul>
             <p className="faint">
-              Caixinhas com IR regressivo pelo prazo até a data-alvo. FGTS rende 3% a.a. com TR considerada zero (simplificação) e não paga IR.
+              Estimativas: caixinhas com IR regressivo pelo prazo até a data-alvo. FGTS rende 3% a.a. com TR considerada zero (simplificação) e não paga IR.
             </p>
           </>
         )}
