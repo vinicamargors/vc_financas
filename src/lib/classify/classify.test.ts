@@ -278,4 +278,15 @@ describe('classify', () => {
     expect(norm(classify([...rows].reverse(), ctx))).toEqual(norm(classify(rows, ctx)))
     expect(norm(classify(rows, ctx)).links).toEqual(['d1>d2', 'd2>d1'])
   })
+
+  it('regra de descrição casa palavras inteiras, em ordem', () => {
+    const tx = (id: string, d: string): ClassifyTx => ({ id, accountId: 'a', date: '2026-11-20', amountCents: -1000, descriptionRaw: d, pluggyCategory: null, counterpartyName: null, counterpartyDoc: null, paymentMethod: null, kind: null, classifiedBy: 'auto', linkedTransactionId: null })
+    const r = classify([tx('1', 'UBER TRIP SP'), tx('2', 'SUBER TRIPS'), tx('3', 'TRIP UBER')], {
+      ownerDocs: [], ownerNames: [], accounts: [{ id: 'a', type: 'BANK' }], merchantsById: {},
+      rules: [{ matchField: 'description', pattern: 'uber trip', merchantId: 'm', categoryId: null, kind: null }],
+    })
+    const m = new Map(r.decisions.map((d) => [d.id, d.merchantId]))
+    expect([m.get('1'), m.get('2'), m.get('3')]).toEqual(['m', undefined, undefined])
+  })
 })
+

@@ -31,5 +31,8 @@ export async function confirmPending(txId: string, choice: PendingChoice, catego
 }
 
 export async function teachPlace(input: TeachPlaceInput): Promise<ReviewResult> {
-  return run((store, userId) => teachPlaceCore(store, userId, input))
+  const ids = Array.isArray(input?.ids) ? input.ids.filter((x): x is string => typeof x === 'string').slice(0, 1000) : []
+  return run((store, userId) =>
+    teachPlaceCore(store, userId, { displayName: String(input?.displayName ?? ''), categoryId: input?.categoryId ?? null, ids, remember: input?.remember !== false }),
+  )
 }

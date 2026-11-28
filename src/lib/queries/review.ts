@@ -48,6 +48,7 @@ export async function loadReview(): Promise<ReviewData> {
       .is('merchant_id', null)
       .is('deleted_at', null)
       .gte('date', minusDays(today, PLACES_DAYS))
+      .order('date', { ascending: false })
       .limit(1000),
     db.from('categories').select('id, name').order('name'),
   ])

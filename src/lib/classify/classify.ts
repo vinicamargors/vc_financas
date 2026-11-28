@@ -77,13 +77,21 @@ const INVEST_OUT = /resgate|resg\./i
 const REFUND = /estorno|reembolso|devolu[cç][aã]o|chargeback/i
 const PIX_TED = /\b(pix|ted)\b/i
 /** Descrições de envio a uma pessoa (Bradesco, Nubank, Mercado Pago). Texto já normalizado. */
-const PERSON_TRANSFER =
+export const PERSON_TRANSFER =
   /^(pix enviado|ted enviad[ao])|transferencia (enviada|pix)|pix .*enviad|transf(\.|erencia)? (cc|p\/)|ted dif/
 const REVIEW_THRESHOLD_CENTS = 100_000
 const DAY_MS = 86_400_000
 
 function dayNumber(date: string): number {
   return Math.round(Date.parse(`${date.slice(0, 10)}T00:00:00Z`) / DAY_MS)
+}
+
+/** As palavras do padrão aparecem inteiras e seguidas no texto (já normalizados). */
+function containsWords(text: string, pattern: string): boolean {
+  const words = pattern.split(/[^a-z0-9]+/).filter(Boolean)
+  if (words.length === 0) return false
+  // Palavras só têm [a-z0-9]: nada a escapar.
+  return new RegExp(`(?:^|[^a-z0-9])${words.join('[^a-z0-9]+')}(?:$|[^a-z0-9])`).test(text)
 }
 
 function matchRule(t: ClassifyTx, rules: Rule[]): Rule | undefined {
@@ -95,7 +103,7 @@ function matchRule(t: ClassifyTx, rules: Rule[]): Rule | undefined {
     if (r.matchField === 'counterparty_doc') return doc !== '' && onlyDigits(r.pattern) === doc
     const p = normalizeText(r.pattern)
     if (!p) return false
-    if (r.matchField === 'description') return desc.includes(p) || raw.includes(p)
+    if (r.matchField === 'description') return containsWords(desc, p) || containsWords(raw, p)
     return name.includes(p)
   })
 }

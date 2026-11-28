@@ -104,7 +104,7 @@ function PlaceCard({ group, categories }: { group: NewPlaceGroup; categories: Ca
         type="button"
         className="rv-save"
         disabled={pending || !categoryId || !name.trim()}
-        onClick={() => save(() => teachPlace({ pattern: group.pattern, displayName: name, categoryId, ids: group.ids, remember }))}
+        onClick={() => save(() => teachPlace({ displayName: name, categoryId, ids: group.ids, remember }))}
       >
         Salvar
       </button>
