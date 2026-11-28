@@ -10,6 +10,9 @@ import { loadCycleData, type CycleData } from '@/lib/queries/cycle'
 import { loadHomeData, oldestBankData, oldestHealthySync } from '@/lib/queries/balances'
 import { loadSavings, summarizeSavings } from '@/lib/queries/savings'
 import { getCdiAnnual } from '@/lib/cdi'
+import { buildGoalView } from '@/lib/invest/goal-view'
+import { loadGoals } from '@/lib/queries/invest'
+import { loadInvestView } from '@/lib/queries/invest-view'
 import { loadRealSpending } from '@/lib/queries/spending'
 import { loadReview, reviewCount } from '@/lib/queries/review'
 import { createServerSupabase, requireUser } from '@/lib/supabase/server'
@@ -132,7 +135,31 @@ function PaymentDayTile() {
   )
 }
 
-function SavingsBlock({ totalCents, dailyYieldCents }: { totalCents: number; dailyYieldCents: number | null }) {
+/** Potencial da primeira meta e lembrete do FGTS. Complemento: sem migração ou com erro, some. */
+async function loadGoalsSummary(userId: string): Promise<{ goal: { name: string; potentialCents: number } | null; fgtsReminder: boolean } | null> {
+  try {
+    const goals = await loadGoals(userId)
+    const view = await loadInvestView(userId)
+    const first = !goals.missing ? goals.goals[0] : undefined
+    return {
+      goal: first ? { name: first.name, potentialCents: buildGoalView(first, view).potentialCents } : null,
+      fgtsReminder: !!view.fgts?.reminderDue,
+    }
+  } catch (e) {
+    console.error(`carregar metas falhou: ${safeErrorMessage(e)}`)
+    return null
+  }
+}
+
+function SavingsBlock({
+  totalCents,
+  dailyYieldCents,
+  goal,
+}: {
+  totalCents: number
+  dailyYieldCents: number | null
+  goal: { name: string; potentialCents: number } | null
+}) {
   return (
     <>
       <div className="sep" />
@@ -149,6 +176,16 @@ function SavingsBlock({ totalCents, dailyYieldCents }: { totalCents: number; dai
           </span>
         )}
       </Link>
+      {goal && (
+        <Link href="/metas" className="block">
+          <span className="hd">
+            Potencial · {goal.name} <Icon name="chev" />
+          </span>
+          <span className="val">
+            <Money cents={goal.potentialCents} />
+          </span>
+        </Link>
+      )}
     </>
   )
 }
@@ -156,7 +193,7 @@ function SavingsBlock({ totalCents, dailyYieldCents }: { totalCents: number; dai
 export default async function InicioPage() {
   const user = await requireUser()
   const supabase = await createServerSupabase()
-  const [{ connections, summary, logos }, profile, savings, cdi, review, spend, cycleData] = await Promise.all([
+  const [{ connections, summary, logos }, profile, savings, cdi, review, spend, cycleData, goalsSummary] = await Promise.all([
     loadHomeData(),
     supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
     // Caixinhas são complemento: falha aqui não derruba o Início.
@@ -171,6 +208,8 @@ export default async function InicioPage() {
       console.error(`carregar ciclo falhou: ${safeErrorMessage(e)}`)
       return null
     }),
+    // Metas e FGTS também são complemento (e podem não ter migração ainda).
+    loadGoalsSummary(user.id),
   ])
   const today = toLocalDate(new Date())
   const needsSalary = cycleData != null && !cycleData.hasSalarySource
@@ -254,7 +293,12 @@ export default async function InicioPage() {
       <QuickActions reviewCount={toReview} />
       <ConnectionStatus connections={connections} />
       {toReview > 0 && <ReviewTile count={toReview} />}
-      {savings && savings.boxes.length > 0 && <SavingsBlock {...summarizeSavings(savings.boxes, [], cdi)} />}
+      {goalsSummary?.fgtsReminder && (
+        <p className="msg">
+          O saldo do FGTS tem mais de 90 dias. <Link href="/config/fgts">Atualizar</Link>
+        </p>
+      )}
+      {savings && savings.boxes.length > 0 && <SavingsBlock {...summarizeSavings(savings.boxes, [], cdi)} goal={goalsSummary?.goal ?? null} />}
     </main>
   )
 }

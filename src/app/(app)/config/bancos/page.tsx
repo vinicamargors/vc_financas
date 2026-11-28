@@ -162,6 +162,14 @@ export default async function BancosPage({ searchParams }: { searchParams: Promi
       </section>
 
       <section className="step">
+        <h2>Caixinhas e metas</h2>
+        <p>Saldo do FGTS e metas que juntam caixinhas e FGTS.</p>
+        <p>
+          <Link href="/config/fgts">FGTS</Link> · <Link href="/metas">Metas</Link> · <Link href="/caixinhas">Caixinhas</Link>
+        </p>
+      </section>
+
+      <section className="step">
         <h2>Atalho do iPhone</h2>
         <p>Compras no Apple Pay entram na hora, antes da Pluggy.</p>
         <Link href="/config/atalho" className="btn secondary">

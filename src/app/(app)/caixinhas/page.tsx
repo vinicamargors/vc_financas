@@ -3,15 +3,32 @@ import { BankMark } from '@/components/bank-mark'
 import { Icon } from '@/components/icons'
 import { Money } from '@/components/money'
 import { getCdiAnnual, dailyYieldCents } from '@/lib/cdi'
+import { projectMonthly } from '@/lib/invest'
 import { formatCdiPercent, loadSavings, summarizeSavings } from '@/lib/queries/savings'
+import { weightedCdiPercent } from '@/lib/queries/invest'
+import { loadInvestView } from '@/lib/queries/invest-view'
+import { requireUser } from '@/lib/supabase/server'
+import { safeErrorMessage } from '@/lib/sync/safe-error'
 
+export const metadata = { title: 'Caixinhas' }
 export const dynamic = 'force-dynamic'
+
+const PROJECTION_MONTHS = 12
 
 /** `YYYY-MM-DD` → `dd/mm`. */
 const dayMonth = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`
 
 export default async function CaixinhasPage() {
-  const [{ boxes, snapshots }, cdi] = await Promise.all([loadSavings(), getCdiAnnual()])
+  const user = await requireUser()
+  const [{ boxes, snapshots }, cdi, view] = await Promise.all([
+    loadSavings(),
+    getCdiAnnual(),
+    // Rendimento real e projeção são complemento: sem eles, a lista continua.
+    loadInvestView(user.id).catch((e: unknown) => {
+      console.error(`carregar caixinhas (rendimento) falhou: ${safeErrorMessage(e)}`)
+      return null
+    }),
+  ])
 
   if (boxes.length === 0) {
     return (
@@ -38,6 +55,15 @@ export default async function CaixinhasPage() {
   }
 
   const summary = summarizeSavings(boxes, snapshots, cdi)
+  const projection =
+    view && cdi != null
+      ? projectMonthly({
+          startCents: summary.totalCents,
+          monthlyCents: Math.max(0, view.paceCents),
+          annualRatePct: (cdi * weightedCdiPercent(boxes)) / 100,
+          months: PROJECTION_MONTHS,
+        }).at(-1)
+      : undefined
 
   return (
     <main>
@@ -53,10 +79,23 @@ export default async function CaixinhasPage() {
             ≈ <Money cents={summary.dailyYieldCents} /> por dia útil
           </p>
         )}
-        {summary.change && (
+        {view?.totalYield ? (
           <p className="sub">
-            Variação desde {dayMonth(summary.change.sinceDate)}: <Money cents={summary.change.cents} sign />{' '}
-            <span className="faint">(inclui depósitos e resgates)</span>
+            Rendeu <Money cents={view.totalYield.yieldCents} sign /> desde {dayMonth(view.totalYield.sinceDate)}{' '}
+            <span className="faint">(descontados aportes e resgates)</span>
+          </p>
+        ) : (
+          summary.change && (
+            <p className="sub">
+              Variação desde {dayMonth(summary.change.sinceDate)}: <Money cents={summary.change.cents} sign />{' '}
+              <span className="faint">(inclui depósitos e resgates)</span>
+            </p>
+          )
+        )}
+        {projection && view && (
+          <p className="sub">
+            Em 12 meses, no ritmo atual (<Money cents={Math.max(0, view.paceCents)} />
+            /mês): <Money cents={projection.grossCents} /> <span className="faint">(líquido de IR: <Money cents={projection.netCents} />)</span>
           </p>
         )}
       </section>
@@ -69,7 +108,8 @@ export default async function CaixinhasPage() {
         {boxes.map((b) => {
           const perDay = cdi != null && b.cdiPercent ? dailyYieldCents(b.balanceCents, cdi, b.cdiPercent) : 0
           return (
-            <li key={b.id} className="tx">
+            <li key={b.id}>
+              <Link href={`/caixinhas/${b.id}`} className="tx">
               <span className="ic" aria-hidden="true">
                 <Icon name="jar" />
               </span>
@@ -88,6 +128,7 @@ export default async function CaixinhasPage() {
                   </small>
                 )}
               </span>
+              </Link>
             </li>
           )
         })}
